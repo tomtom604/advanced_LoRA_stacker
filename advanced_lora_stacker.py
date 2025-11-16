@@ -21,7 +21,12 @@ class AdvancedLoraStacker:
             "required": {
                 "model": ("MODEL",),
                 "clip": ("CLIP",),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": "randomize"}),
+                "seed": ("INT", {
+                    "default": 0, 
+                    "min": 0, 
+                    "max": 0xffffffffffffffff,
+                    "control_after_generate": "randomize"
+                }),
             },
             "hidden": {
                 "stack_data": "STRING",
