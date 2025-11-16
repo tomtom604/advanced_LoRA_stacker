@@ -36,7 +36,7 @@ async function fetchLoraList() {
 }
 
 app.registerExtension({
-    name: "AdvancedLoraStacker",
+    name: "advanced_lora_stacker.AdvancedLoraStacker",
     
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "AdvancedLoraStacker") return;
