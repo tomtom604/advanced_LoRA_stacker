@@ -7,6 +7,7 @@ import json
 import random
 import folder_paths
 import comfy.sd
+import comfy.utils
 
 
 class AdvancedLoraStacker:
