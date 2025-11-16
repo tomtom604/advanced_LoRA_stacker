@@ -191,9 +191,16 @@ class AdvancedLoraStacker:
                 continue
             
             print(f"\n{'─'*80}")
-            print(f"Group {group.get('index', 'N/A')}")
+            print(f"Group {group.get('index', 'N/A')} - Processing {len(group_loras)} LoRA(s)")
             print(f"  Max MODEL strength: {max_model:.4f}")
             print(f"  Max CLIP strength: {max_clip:.4f}")
+            
+            # Count locked values
+            num_locked_model = sum(1 for l in group_loras if l.get("lock_model", False))
+            num_locked_clip = sum(1 for l in group_loras if l.get("lock_clip", False))
+            if num_locked_model > 0 or num_locked_clip > 0:
+                print(f"  Locked: {num_locked_model} MODEL, {num_locked_clip} CLIP")
+            
             print(f"{'─'*80}")
             
             # Separate locked and unlocked LoRAs
@@ -245,7 +252,7 @@ class AdvancedLoraStacker:
         
         if ungrouped:
             print(f"\n{'─'*80}")
-            print("Ungrouped LoRAs")
+            print(f"Ungrouped LoRAs - Processing {len(ungrouped)} LoRA(s)")
             print(f"{'─'*80}")
             
             for lora in ungrouped:
@@ -254,20 +261,24 @@ class AdvancedLoraStacker:
                 
                 if lora_name and lora_name != "None":
                     # Determine MODEL strength
+                    model_range_info = ""
                     if lora.get("random_model", False):
                         min_model = lora.get("min_model", 0.0)
                         max_model = lora.get("max_model", 1.0)
                         random.seed(seed)
                         model_str = round(random.uniform(min_model, max_model), 4)
+                        model_range_info = f" (random from {min_model:.4f}-{max_model:.4f})"
                     else:
                         model_str = lora.get("model_strength", 1.0)
                     
                     # Determine CLIP strength
+                    clip_range_info = ""
                     if lora.get("random_clip", False):
                         min_clip = lora.get("min_clip", 0.0)
                         max_clip = lora.get("max_clip", 1.0)
                         random.seed(seed + 1)
                         clip_str = round(random.uniform(min_clip, max_clip), 4)
+                        clip_range_info = f" (random from {min_clip:.4f}-{max_clip:.4f})"
                     else:
                         clip_str = lora.get("clip_strength", 1.0)
                     
@@ -275,16 +286,10 @@ class AdvancedLoraStacker:
                         model, clip, lora_name, preset, model_str, clip_str
                     )
                     
-                    rand_info = []
-                    if lora.get("random_model", False):
-                        rand_info.append(f"MODEL random")
-                    if lora.get("random_clip", False):
-                        rand_info.append(f"CLIP random")
-                    rand_str = f" [{', '.join(rand_info)}]" if rand_info else ""
-                    
                     print(f"  ✓ {lora_name}")
                     print(f"    Type: {preset}")
-                    print(f"    MODEL: {model_str:.4f}  CLIP: {clip_str:.4f}{rand_str}")
+                    print(f"    MODEL: {model_str:.4f}{model_range_info}")
+                    print(f"    CLIP: {clip_str:.4f}{clip_range_info}")
                     
                     info_lines.append(f"{lora_name} ({preset}) - M:{model_str:.4f} C:{clip_str:.4f}")
         
