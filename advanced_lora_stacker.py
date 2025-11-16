@@ -29,7 +29,7 @@ class AdvancedLoraStacker:
                 }),
             },
             "hidden": {
-                "stack_data": "STRING",
+                "stack_data": ("STRING", {"default": ""}),
             }
         }
 
