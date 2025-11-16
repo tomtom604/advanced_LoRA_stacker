@@ -68,9 +68,7 @@ app.registerExtension({
                 "➕ Add LoRA",
                 null,
                 () => {
-                    const size = this.size;
                     this.addLora(null);
-                    this.setSize(size); // Maintain size
                 }
             );
             
@@ -79,9 +77,7 @@ app.registerExtension({
                 "➕ Add Group",
                 null,
                 () => {
-                    const size = this.size;
                     this.addGroup();
-                    this.setSize(size); // Maintain size
                 }
             );
             
@@ -221,9 +217,7 @@ app.registerExtension({
             
             // Remove group button (inline with header conceptually)
             const removeBtn = this.addWidget("button", "✕", null, () => {
-                const size = this.size;
                 this.removeGroup(groupId);
-                this.setSize(size);
             });
             removeBtn.groupWidget = true;
             removeBtn.groupId = groupId;
@@ -255,9 +249,7 @@ app.registerExtension({
             
             // Add LoRA to group button
             const addLoraBtn = this.addWidget("button", `  ➕ Add LoRA`, null, () => {
-                const size = this.size;
                 this.addLora(groupId);
-                this.setSize(size);
             });
             addLoraBtn.groupWidget = true;
             addLoraBtn.groupId = groupId;
@@ -275,7 +267,7 @@ app.registerExtension({
             
             this.groups.push(group);
             this.updateStackData();
-            this.setSize([this.size[0], this.size[1] + 150]); // Expand for new group
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -315,7 +307,7 @@ app.registerExtension({
             }
             
             this.updateStackData();
-            this.setSize([this.size[0], Math.max(140, this.size[1] - 150)]);
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -362,8 +354,7 @@ app.registerExtension({
             }
             
             // Adjust size
-            const delta = wasCollapsed ? 100 : -100;
-            this.setSize([this.size[0], this.size[1] + delta * (groupLoRAs.length + 1)]);
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -442,9 +433,7 @@ app.registerExtension({
             
             // Remove button (small X button)
             const removeBtn = this.addWidget("button", "✕", null, () => {
-                const size = this.size;
                 this.removeLora(loraId);
-                this.setSize(size);
             });
             if (groupId) {
                 removeBtn.groupWidget = true;
@@ -642,10 +631,7 @@ app.registerExtension({
             
             this.loras.push(lora);
             this.updateStackData();
-            
-            // Expand node size for new LoRA
-            const expansion = groupId ? 80 : 120;
-            this.setSize([this.size[0], this.size[1] + expansion]);
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -670,8 +656,7 @@ app.registerExtension({
             
             if (!skipUpdate) {
                 this.updateStackData();
-                const shrink = lora.group_id ? 80 : 120;
-                this.setSize([this.size[0], Math.max(140, this.size[1] - shrink)]);
+                this.setSize(this.computeSize());
             }
         };
         
@@ -719,6 +704,37 @@ app.registerExtension({
             };
             
             this.stackDataWidget.value = JSON.stringify(data);
+        };
+        
+        /**
+         * Override computeSize to calculate proper node size
+         */
+        nodeType.prototype.computeSize = function(out) {
+            let height = 10; // Top padding
+            let maxWidth = 450;
+            
+            // Calculate height based on all visible widgets
+            for (const widget of this.widgets) {
+                if (widget.computeSize) {
+                    const size = widget.computeSize(maxWidth);
+                    if (size && size[1] > 0) {
+                        height += size[1] + 4;
+                    }
+                } else if (!widget.type || widget.type !== "hidden") {
+                    // Standard widget height
+                    height += 34;
+                }
+            }
+            
+            height += 10; // Bottom padding
+            
+            const size = [maxWidth, Math.max(140, height)];
+            if (out) {
+                out[0] = size[0];
+                out[1] = size[1];
+                return out;
+            }
+            return size;
         };
     }
 });
