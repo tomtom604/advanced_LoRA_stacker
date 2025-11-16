@@ -714,15 +714,18 @@ app.registerExtension({
             let maxWidth = 450;
             
             // Calculate height based on all visible widgets
-            for (const widget of this.widgets) {
-                if (widget.computeSize) {
-                    const size = widget.computeSize(maxWidth);
-                    if (size && size[1] > 0) {
-                        height += size[1] + 4;
+            // Check if widgets array exists and is iterable
+            if (this.widgets && Array.isArray(this.widgets)) {
+                for (const widget of this.widgets) {
+                    if (widget.computeSize) {
+                        const size = widget.computeSize(maxWidth);
+                        if (size && size[1] > 0) {
+                            height += size[1] + 4;
+                        }
+                    } else if (!widget.type || widget.type !== "hidden") {
+                        // Standard widget height
+                        height += 34;
                     }
-                } else if (!widget.type || widget.type !== "hidden") {
-                    // Standard widget height
-                    height += 34;
                 }
             }
             
