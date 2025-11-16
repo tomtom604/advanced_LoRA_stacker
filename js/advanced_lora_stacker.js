@@ -1,6 +1,6 @@
 /**
  * Advanced LoRA Stacker - JavaScript Frontend
- * Implements dynamic UI with groups, presets, and random strength controls
+ * Comprehensive UI with groups, presets, and sophisticated controls
  */
 
 import { app } from "../../scripts/app.js";
@@ -55,11 +55,15 @@ app.registerExtension({
             this.nextLoraId = 1;
             this.collapsedGroups = new Set();
             
-            // Store original size
-            this.setSize([400, 120]);
+            // Set initial size
+            this.setSize([450, 140]);
+            this.originalSize = [450, 140];
             
-            // Create main action buttons
-            this.addButton = this.addWidget(
+            // Find the seed widget - it should already exist from INPUT_TYPES
+            this.seedWidget = this.widgets.find(w => w.name === "seed");
+            
+            // Create main action buttons at the bottom
+            this.addLoraButton = this.addWidget(
                 "button",
                 "➕ Add LoRA",
                 null,
@@ -83,6 +87,7 @@ app.registerExtension({
                 // Create hidden widget if not exists
                 this.stackDataWidget = this.addWidget("text", "stack_data", "", () => {});
                 this.stackDataWidget.type = "hidden";
+                this.stackDataWidget.computeSize = () => [0, -4]; // Hide completely
             }
             
             // Override serialize to save state
@@ -100,39 +105,74 @@ app.registerExtension({
                     originalOnDrawForeground.apply(this, arguments);
                 }
                 
-                // Draw group containers
+                // Draw group containers with rounded corners
+                const widgetY = 40; // Start after title bar
+                let currentY = widgetY;
+                
                 for (const group of this.groups) {
-                    if (group.containerBounds) {
-                        const bounds = group.containerBounds;
-                        
-                        // Draw rounded container
-                        ctx.fillStyle = "#1a2a3a";
-                        ctx.strokeStyle = "#3a5a7a";
-                        ctx.lineWidth = 1;
-                        
-                        ctx.beginPath();
-                        this.roundRect(ctx, bounds.x, bounds.y, bounds.width, bounds.height, 6);
-                        ctx.fill();
-                        ctx.stroke();
+                    const collapsed = this.collapsedGroups.has(group.id);
+                    
+                    // Calculate container bounds
+                    let groupHeight = 10; // Padding
+                    const groupWidgets = this.getGroupWidgets(group.id);
+                    
+                    for (const widget of groupWidgets) {
+                        if (collapsed && widget.groupWidget && widget !== groupWidgets[0]) {
+                            continue; // Skip collapsed widgets
+                        }
+                        const size = widget.computeSize ? widget.computeSize(this.size[0]) : [0, 30];
+                        if (size[1] > 0) {
+                            groupHeight += size[1] + 4;
+                        }
                     }
+                    
+                    // Draw rounded container
+                    ctx.fillStyle = "#1a2a3a";
+                    ctx.strokeStyle = "#3a5a7a";
+                    ctx.lineWidth = 2;
+                    
+                    const x = 15;
+                    const y = currentY;
+                    const width = this.size[0] - 30;
+                    const height = groupHeight;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x + 6, y);
+                    ctx.lineTo(x + width - 6, y);
+                    ctx.quadraticCurveTo(x + width, y, x + width, y + 6);
+                    ctx.lineTo(x + width, y + height - 6);
+                    ctx.quadraticCurveTo(x + width, y + height, x + width - 6, y + height);
+                    ctx.lineTo(x + 6, y + height);
+                    ctx.quadraticCurveTo(x, y + height, x, y + height - 6);
+                    ctx.lineTo(x, y + 6);
+                    ctx.quadraticCurveTo(x, y, x + 6, y);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    currentY += groupHeight + 10;
                 }
             };
             
-            // Helper for rounded rectangles
-            this.roundRect = function(ctx, x, y, width, height, radius) {
-                ctx.moveTo(x + radius, y);
-                ctx.lineTo(x + width - radius, y);
-                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-                ctx.lineTo(x + width, y + height - radius);
-                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-                ctx.lineTo(x + radius, y + height);
-                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-                ctx.lineTo(x, y + radius);
-                ctx.quadraticCurveTo(x, y, x + radius, y);
-                ctx.closePath();
-            };
-            
             return r;
+        };
+        
+        /**
+         * Get all widgets belonging to a group (including LoRAs)
+         */
+        nodeType.prototype.getGroupWidgets = function(groupId) {
+            const group = this.groups.find(g => g.id === groupId);
+            if (!group) return [];
+            
+            const widgets = [...group.widgets];
+            
+            // Add LoRA widgets that belong to this group
+            const groupLoras = this.loras.filter(l => l.group_id === groupId);
+            for (const lora of groupLoras) {
+                widgets.push(...lora.widgets);
+            }
+            
+            return widgets;
         };
         
         /**
@@ -150,29 +190,45 @@ app.registerExtension({
                 widgets: []
             };
             
-            // Find insertion index (before main buttons)
-            const addButtonIdx = this.widgets.indexOf(this.addButton);
-            let insertIdx = addButtonIdx;
+            // Find insertion index - groups go at the top, before action buttons
+            const seedIdx = this.widgets.indexOf(this.seedWidget);
+            let insertIdx = seedIdx + 1;
             
-            // Group header (custom draw)
-            const headerWidget = this.addWidget("button", `▼ Group ${groupIndex}`, null, () => {
+            // Insert after last group
+            if (this.groups.length > 0) {
+                const lastGroup = this.groups[this.groups.length - 1];
+                const lastGroupWidgets = this.getGroupWidgets(lastGroup.id);
+                if (lastGroupWidgets.length > 0) {
+                    const lastWidget = lastGroupWidgets[lastGroupWidgets.length - 1];
+                    const widgetIdx = this.widgets.indexOf(lastWidget);
+                    if (widgetIdx !== -1) {
+                        insertIdx = widgetIdx + 1;
+                    }
+                }
+            }
+            
+            // Group header with collapse toggle and remove button
+            const headerWidget = this.addWidget("button", `▼ group_${groupIndex}`, null, () => {
                 this.toggleGroupCollapse(groupId);
             });
-            headerWidget.type = "group_header";
+            headerWidget.groupWidget = true;
             headerWidget.groupId = groupId;
             group.widgets.push(headerWidget);
             
-            // Remove group button
-            const removeBtn = this.addWidget("button", "✕ Remove Group", null, () => {
+            // Remove group button (inline with header conceptually)
+            const removeBtn = this.addWidget("button", "✕", null, () => {
                 this.removeGroup(groupId);
             });
-            removeBtn.type = "group_remove";
+            removeBtn.groupWidget = true;
+            removeBtn.groupId = groupId;
             group.widgets.push(removeBtn);
             
             // Max Model strength
             const maxModelWidget = ComfyWidgets.FLOAT(this, "max_model", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
-            maxModelWidget.widget.name = `Max MODEL Strength`;
+            maxModelWidget.widget.name = `  Max MODEL`;
             maxModelWidget.widget.value = 1.0;
+            maxModelWidget.widget.groupWidget = true;
+            maxModelWidget.widget.groupId = groupId;
             maxModelWidget.widget.callback = () => {
                 group.max_model = maxModelWidget.widget.value;
                 this.updateStackData();
@@ -181,8 +237,10 @@ app.registerExtension({
             
             // Max CLIP strength
             const maxClipWidget = ComfyWidgets.FLOAT(this, "max_clip", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
-            maxClipWidget.widget.name = `Max CLIP Strength`;
+            maxClipWidget.widget.name = `  Max CLIP`;
             maxClipWidget.widget.value = 1.0;
+            maxClipWidget.widget.groupWidget = true;
+            maxClipWidget.widget.groupId = groupId;
             maxClipWidget.widget.callback = () => {
                 group.max_clip = maxClipWidget.widget.value;
                 this.updateStackData();
@@ -190,10 +248,11 @@ app.registerExtension({
             group.widgets.push(maxClipWidget.widget);
             
             // Add LoRA to group button
-            const addLoraBtn = this.addWidget("button", `➕ Add LoRA to Group ${groupIndex}`, null, () => {
+            const addLoraBtn = this.addWidget("button", `  ➕ Add LoRA`, null, () => {
                 this.addLora(groupId);
             });
-            addLoraBtn.type = "group_add_lora";
+            addLoraBtn.groupWidget = true;
+            addLoraBtn.groupId = groupId;
             group.widgets.push(addLoraBtn);
             
             // Move widgets to correct position
@@ -208,7 +267,7 @@ app.registerExtension({
             
             this.groups.push(group);
             this.updateStackData();
-            this.updateSize();
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -237,22 +296,18 @@ app.registerExtension({
             // Remove group
             this.groups.splice(groupIdx, 1);
             
-            // Update group indices
+            // Update group indices and labels
             for (let i = 0; i < this.groups.length; i++) {
                 this.groups[i].index = i + 1;
-                // Update button labels
-                for (const widget of this.groups[i].widgets) {
-                    if (widget.type === "group_header") {
-                        const collapsed = this.collapsedGroups.has(this.groups[i].id);
-                        widget.name = `${collapsed ? '▶' : '▼'} Group ${i + 1}`;
-                    } else if (widget.type === "group_add_lora") {
-                        widget.name = `➕ Add LoRA to Group ${i + 1}`;
-                    }
+                const headerWidget = this.groups[i].widgets.find(w => w.name.includes('group_'));
+                if (headerWidget) {
+                    const collapsed = this.collapsedGroups.has(this.groups[i].id);
+                    headerWidget.name = `${collapsed ? '▶' : '▼'} group_${i + 1}`;
                 }
             }
             
             this.updateStackData();
-            this.updateSize();
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -262,36 +317,44 @@ app.registerExtension({
             const group = this.groups.find(g => g.id === groupId);
             if (!group) return;
             
-            const collapsed = this.collapsedGroups.has(groupId);
+            const wasCollapsed = this.collapsedGroups.has(groupId);
             
-            if (collapsed) {
+            if (wasCollapsed) {
                 this.collapsedGroups.delete(groupId);
             } else {
                 this.collapsedGroups.add(groupId);
             }
             
             // Update header button
-            const headerWidget = group.widgets.find(w => w.type === "group_header");
+            const headerWidget = group.widgets.find(w => w.name.includes('group_'));
             if (headerWidget) {
-                headerWidget.name = `${collapsed ? '▼' : '▶'} Group ${group.index}`;
+                headerWidget.name = `${wasCollapsed ? '▼' : '▶'} group_${group.index}`;
             }
             
-            // Hide/show group widgets (except header)
-            for (const widget of group.widgets) {
-                if (widget.type !== "group_header") {
-                    widget.computeSize = collapsed ? () => [0, -4] : undefined;
+            // Toggle visibility of group widgets (except header and remove button)
+            for (let i = 2; i < group.widgets.length; i++) {
+                const widget = group.widgets[i];
+                if (wasCollapsed) {
+                    delete widget.computeSize;
+                } else {
+                    widget.computeSize = () => [0, -4];
                 }
             }
             
-            // Hide/show group LoRAs
+            // Toggle visibility of group LoRAs
             const groupLoRAs = this.loras.filter(l => l.group_id === groupId);
             for (const lora of groupLoRAs) {
                 for (const widget of lora.widgets) {
-                    widget.computeSize = collapsed ? () => [0, -4] : undefined;
+                    if (wasCollapsed) {
+                        delete widget.computeSize;
+                    } else {
+                        widget.computeSize = () => [0, -4];
+                    }
                 }
             }
             
-            this.updateSize();
+            // Adjust size
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -329,11 +392,11 @@ app.registerExtension({
             // Find insertion index
             let insertIdx;
             if (groupId !== null) {
-                // Insert after group's add button
+                // Insert after group's add button or last LoRA in group
                 const group = this.groups.find(g => g.id === groupId);
                 if (!group) return;
                 
-                const addLoraBtn = group.widgets.find(w => w.type === "group_add_lora");
+                const addLoraBtn = group.widgets.find(w => w.name.includes('Add LoRA'));
                 insertIdx = this.widgets.indexOf(addLoraBtn) + 1;
                 
                 // Find last LoRA in this group
@@ -344,44 +407,77 @@ app.registerExtension({
                     insertIdx = this.widgets.indexOf(lastWidget) + 1;
                 }
             } else {
-                // Insert at end
-                insertIdx = this.widgets.length;
+                // Insert before main buttons (at end)
+                const addLoraIdx = this.widgets.indexOf(this.addLoraButton);
+                insertIdx = addLoraIdx;
+                
+                // Find last ungrouped LoRA
+                const ungroupedLoras = this.loras.filter(l => l.group_id === null);
+                if (ungroupedLoras.length > 0) {
+                    const lastLora = ungroupedLoras[ungroupedLoras.length - 1];
+                    const lastWidget = lastLora.widgets[lastLora.widgets.length - 1];
+                    insertIdx = this.widgets.indexOf(lastWidget) + 1;
+                }
             }
             
-            // LoRA selector
-            const loraWidget = this.addWidget("combo", "LoRA", "None", (value) => {
+            // LoRA name selector with inline remove button
+            const loraWidget = this.addWidget("combo", groupId ? "    LoRA" : "LoRA", "None", (value) => {
                 lora.name = value;
                 this.updateStackData();
             }, { values: availableLoRAs });
+            if (groupId) {
+                loraWidget.groupWidget = true;
+                loraWidget.groupId = groupId;
+            }
             lora.widgets.push(loraWidget);
             
+            // Remove button (small X button)
+            const removeBtn = this.addWidget("button", "✕", null, () => {
+                this.removeLora(loraId);
+            });
+            if (groupId) {
+                removeBtn.groupWidget = true;
+                removeBtn.groupId = groupId;
+            }
+            lora.widgets.push(removeBtn);
+            
             // Preset selector
-            const presetWidget = this.addWidget("combo", "Type/Preset", "Full", (value) => {
+            const presetWidget = this.addWidget("combo", groupId ? "    Type" : "Type", "Full", (value) => {
                 lora.preset = value;
                 this.updateStackData();
             }, { values: ["Full", "Character", "Style", "Concept", "Fix Hands"] });
+            if (groupId) {
+                presetWidget.groupWidget = true;
+                presetWidget.groupId = groupId;
+            }
             lora.widgets.push(presetWidget);
             
             if (groupId !== null) {
-                // Grouped LoRA - lock controls
+                // ===== GROUPED LORA - LOCK CONTROLS =====
                 
-                // Lock Model checkbox
+                // MODEL lock checkbox
                 const lockModelWidget = ComfyWidgets.BOOLEAN(this, "lock_model", ["BOOLEAN", {default: false}], app);
-                lockModelWidget.widget.name = "Lock MODEL (0.0000)";
+                lockModelWidget.widget.name = "    🔒 MODEL";
                 lockModelWidget.widget.value = false;
+                lockModelWidget.widget.groupWidget = true;
+                lockModelWidget.widget.groupId = groupId;
                 lockModelWidget.widget.callback = (value) => {
                     lora.lock_model = value;
-                    // Show/hide locked value input
-                    lockedModelValueWidget.computeSize = value ? undefined : () => [0, -4];
+                    if (value) {
+                        lockedModelValueWidget.computeSize = undefined;
+                    } else {
+                        lockedModelValueWidget.computeSize = () => [0, -4];
+                    }
                     this.updateStackData();
-                    this.updateSize();
                 };
                 lora.widgets.push(lockModelWidget.widget);
                 
-                // Locked Model value
+                // Locked Model value input
                 const lockedModelValueWidget = ComfyWidgets.FLOAT(this, "locked_model_value", ["FLOAT", {default: 0.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                lockedModelValueWidget.widget.name = "  Locked MODEL Value";
+                lockedModelValueWidget.widget.name = "      Value";
                 lockedModelValueWidget.widget.value = 0.0;
+                lockedModelValueWidget.widget.groupWidget = true;
+                lockedModelValueWidget.widget.groupId = groupId;
                 lockedModelValueWidget.widget.computeSize = () => [0, -4]; // Hidden by default
                 lockedModelValueWidget.widget.callback = (value) => {
                     lora.locked_model_value = value;
@@ -389,23 +485,29 @@ app.registerExtension({
                 };
                 lora.widgets.push(lockedModelValueWidget.widget);
                 
-                // Lock CLIP checkbox
+                // CLIP lock checkbox
                 const lockClipWidget = ComfyWidgets.BOOLEAN(this, "lock_clip", ["BOOLEAN", {default: false}], app);
-                lockClipWidget.widget.name = "Lock CLIP (0.0000)";
+                lockClipWidget.widget.name = "    🔒 CLIP";
                 lockClipWidget.widget.value = false;
+                lockClipWidget.widget.groupWidget = true;
+                lockClipWidget.widget.groupId = groupId;
                 lockClipWidget.widget.callback = (value) => {
                     lora.lock_clip = value;
-                    // Show/hide locked value input
-                    lockedClipValueWidget.computeSize = value ? undefined : () => [0, -4];
+                    if (value) {
+                        lockedClipValueWidget.computeSize = undefined;
+                    } else {
+                        lockedClipValueWidget.computeSize = () => [0, -4];
+                    }
                     this.updateStackData();
-                    this.updateSize();
                 };
                 lora.widgets.push(lockClipWidget.widget);
                 
-                // Locked CLIP value
+                // Locked CLIP value input
                 const lockedClipValueWidget = ComfyWidgets.FLOAT(this, "locked_clip_value", ["FLOAT", {default: 0.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                lockedClipValueWidget.widget.name = "  Locked CLIP Value";
+                lockedClipValueWidget.widget.name = "      Value";
                 lockedClipValueWidget.widget.value = 0.0;
+                lockedClipValueWidget.widget.groupWidget = true;
+                lockedClipValueWidget.widget.groupId = groupId;
                 lockedClipValueWidget.widget.computeSize = () => [0, -4]; // Hidden by default
                 lockedClipValueWidget.widget.callback = (value) => {
                     lora.locked_clip_value = value;
@@ -414,11 +516,11 @@ app.registerExtension({
                 lora.widgets.push(lockedClipValueWidget.widget);
                 
             } else {
-                // Ungrouped LoRA - full randomization controls
+                // ===== UNGROUPED LORA - FULL RANDOMIZATION CONTROLS =====
                 
-                // MODEL strength
+                // MODEL strength (fixed)
                 const modelStrWidget = ComfyWidgets.FLOAT(this, "model_strength", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                modelStrWidget.widget.name = "MODEL Strength";
+                modelStrWidget.widget.name = "MODEL Str";
                 modelStrWidget.widget.value = 1.0;
                 modelStrWidget.widget.callback = (value) => {
                     lora.model_strength = value;
@@ -428,21 +530,24 @@ app.registerExtension({
                 
                 // Random MODEL checkbox
                 const randomModelWidget = ComfyWidgets.BOOLEAN(this, "random_model", ["BOOLEAN", {default: false}], app);
-                randomModelWidget.widget.name = "Random MODEL";
+                randomModelWidget.widget.name = "  🎲 Random";
                 randomModelWidget.widget.value = false;
                 randomModelWidget.widget.callback = (value) => {
                     lora.random_model = value;
-                    // Show/hide min/max inputs
-                    minModelWidget.computeSize = value ? undefined : () => [0, -4];
-                    maxModelWidget.computeSize = value ? undefined : () => [0, -4];
+                    if (value) {
+                        minModelWidget.computeSize = undefined;
+                        maxModelWidget.computeSize = undefined;
+                    } else {
+                        minModelWidget.computeSize = () => [0, -4];
+                        maxModelWidget.computeSize = () => [0, -4];
+                    }
                     this.updateStackData();
-                    this.updateSize();
                 };
                 lora.widgets.push(randomModelWidget.widget);
                 
                 // Min MODEL
                 const minModelWidget = ComfyWidgets.FLOAT(this, "min_model", ["FLOAT", {default: 0.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                minModelWidget.widget.name = "  Min MODEL";
+                minModelWidget.widget.name = "    Min";
                 minModelWidget.widget.value = 0.0;
                 minModelWidget.widget.computeSize = () => [0, -4]; // Hidden by default
                 minModelWidget.widget.callback = (value) => {
@@ -453,7 +558,7 @@ app.registerExtension({
                 
                 // Max MODEL
                 const maxModelWidget = ComfyWidgets.FLOAT(this, "max_model", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                maxModelWidget.widget.name = "  Max MODEL";
+                maxModelWidget.widget.name = "    Max";
                 maxModelWidget.widget.value = 1.0;
                 maxModelWidget.widget.computeSize = () => [0, -4]; // Hidden by default
                 maxModelWidget.widget.callback = (value) => {
@@ -462,9 +567,9 @@ app.registerExtension({
                 };
                 lora.widgets.push(maxModelWidget.widget);
                 
-                // CLIP strength
+                // CLIP strength (fixed)
                 const clipStrWidget = ComfyWidgets.FLOAT(this, "clip_strength", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                clipStrWidget.widget.name = "CLIP Strength";
+                clipStrWidget.widget.name = "CLIP Str";
                 clipStrWidget.widget.value = 1.0;
                 clipStrWidget.widget.callback = (value) => {
                     lora.clip_strength = value;
@@ -474,21 +579,24 @@ app.registerExtension({
                 
                 // Random CLIP checkbox
                 const randomClipWidget = ComfyWidgets.BOOLEAN(this, "random_clip", ["BOOLEAN", {default: false}], app);
-                randomClipWidget.widget.name = "Random CLIP";
+                randomClipWidget.widget.name = "  🎲 Random";
                 randomClipWidget.widget.value = false;
                 randomClipWidget.widget.callback = (value) => {
                     lora.random_clip = value;
-                    // Show/hide min/max inputs
-                    minClipWidget.computeSize = value ? undefined : () => [0, -4];
-                    maxClipWidget.computeSize = value ? undefined : () => [0, -4];
+                    if (value) {
+                        minClipWidget.computeSize = undefined;
+                        maxClipWidget.computeSize = undefined;
+                    } else {
+                        minClipWidget.computeSize = () => [0, -4];
+                        maxClipWidget.computeSize = () => [0, -4];
+                    }
                     this.updateStackData();
-                    this.updateSize();
                 };
                 lora.widgets.push(randomClipWidget.widget);
                 
                 // Min CLIP
                 const minClipWidget = ComfyWidgets.FLOAT(this, "min_clip", ["FLOAT", {default: 0.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                minClipWidget.widget.name = "  Min CLIP";
+                minClipWidget.widget.name = "    Min";
                 minClipWidget.widget.value = 0.0;
                 minClipWidget.widget.computeSize = () => [0, -4]; // Hidden by default
                 minClipWidget.widget.callback = (value) => {
@@ -499,7 +607,7 @@ app.registerExtension({
                 
                 // Max CLIP
                 const maxClipWidget = ComfyWidgets.FLOAT(this, "max_clip", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
-                maxClipWidget.widget.name = "  Max CLIP";
+                maxClipWidget.widget.name = "    Max";
                 maxClipWidget.widget.value = 1.0;
                 maxClipWidget.widget.computeSize = () => [0, -4]; // Hidden by default
                 maxClipWidget.widget.callback = (value) => {
@@ -509,26 +617,21 @@ app.registerExtension({
                 lora.widgets.push(maxClipWidget.widget);
             }
             
-            // Remove button
-            const removeBtn = this.addWidget("button", "✕ Remove LoRA", null, () => {
-                this.removeLora(loraId);
-            });
-            removeBtn.type = "lora_remove";
-            lora.widgets.push(removeBtn);
-            
             // Move widgets to correct position
             for (const widget of lora.widgets) {
                 const currentIdx = this.widgets.indexOf(widget);
-                if (currentIdx !== insertIdx) {
+                if (currentIdx !== -1 && currentIdx !== insertIdx) {
                     this.widgets.splice(currentIdx, 1);
                     this.widgets.splice(insertIdx, 0, widget);
+                    insertIdx++;
+                } else {
+                    insertIdx++;
                 }
-                insertIdx++;
             }
             
             this.loras.push(lora);
             this.updateStackData();
-            this.updateSize();
+            this.setSize(this.computeSize());
         };
         
         /**
@@ -553,7 +656,7 @@ app.registerExtension({
             
             if (!skipUpdate) {
                 this.updateStackData();
-                this.updateSize();
+                this.setSize(this.computeSize());
             }
         };
         
@@ -604,26 +707,34 @@ app.registerExtension({
         };
         
         /**
-         * Update node size based on visible widgets
+         * Override computeSize to calculate proper node size
          */
-        nodeType.prototype.updateSize = function() {
-            // Calculate height based on visible widgets
-            let height = 80; // Base height
+        nodeType.prototype.computeSize = function(out) {
+            let height = 10; // Top padding
+            let maxWidth = 450;
             
+            // Calculate height based on all visible widgets
             for (const widget of this.widgets) {
                 if (widget.computeSize) {
-                    const size = widget.computeSize();
-                    if (size && size[1]) {
-                        height += Math.max(0, size[1] + 4);
+                    const size = widget.computeSize(maxWidth);
+                    if (size && size[1] > 0) {
+                        height += size[1] + 4;
                     }
-                } else {
-                    height += 30; // Default widget height
+                } else if (!widget.type || widget.type !== "hidden") {
+                    // Standard widget height
+                    height += 34;
                 }
             }
             
-            // Keep current width, update height
-            const currentSize = this.size;
-            this.setSize([currentSize[0], Math.max(120, height)]);
+            height += 10; // Bottom padding
+            
+            const size = [maxWidth, Math.max(140, height)];
+            if (out) {
+                out[0] = size[0];
+                out[1] = size[1];
+                return out;
+            }
+            return size;
         };
     }
 });
