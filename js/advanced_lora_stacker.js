@@ -899,13 +899,26 @@ app.registerExtension({
                 if (row.elements) {
                     for (const element of row.elements) {
                         if (element.action || element.widget) {
+                            // Calculate proper bounds for clickable area
+                            let boundsY = element.y;
+                            let boundsHeight = element.height || LAYOUT.ROW_HEIGHT;
+                            
+                            // For text-based elements (dropdown, value, toggle, label), 
+                            // y is the text baseline, so adjust to get the full row area
+                            if (element.type === 'dropdown' || element.type === 'value' || element.type === 'toggle') {
+                                // y is set to row.y + ROW_HEIGHT/2 + 5 for text baseline
+                                // So calculate the actual row.y by subtracting
+                                boundsY = row.y;
+                                boundsHeight = LAYOUT.ROW_HEIGHT;
+                            }
+                            
                             this.clickableElements.push({
                                 ...element,
                                 bounds: {
                                     x: element.x,
-                                    y: element.y,
+                                    y: boundsY,
                                     width: element.width || 60,
-                                    height: element.height || LAYOUT.ROW_HEIGHT
+                                    height: boundsHeight
                                 }
                             });
                         }
@@ -1398,30 +1411,132 @@ app.registerExtension({
         /**
          * Handle mouse down events
          */
-        nodeType.prototype.onMouseDown = function(e, localPos) {
+        nodeType.prototype.onMouseDown = function(e, localPos, canvas) {
             for (const element of this.clickableElements) {
                 if (isPointInRect(localPos[0], localPos[1], element.bounds)) {
                     if (element.action) {
+                        // Direct action callback (for buttons)
                         element.action();
                         this.setDirtyCanvas(true, true);
                         return true;
                     }
                     if (element.widget) {
-                        // Trigger widget callback
-                        if (element.widget.callback) {
-                            // For combo widgets, we'd need to show a popup, but for now just cycle
-                            // For boolean widgets, toggle
-                            if (element.widget.type === 'toggle' || element.widget.type === 'boolean') {
-                                element.widget.value = !element.widget.value;
-                                element.widget.callback(element.widget.value);
-                                this.setDirtyCanvas(true, true);
+                        const widget = element.widget;
+                        
+                        // Handle different element types that reference widgets
+                        if (element.type === 'toggle') {
+                            // Toggle boolean widgets
+                            widget.value = !widget.value;
+                            if (widget.callback) {
+                                widget.callback(widget.value);
                             }
+                            this.setDirtyCanvas(true, true);
+                            return true;
+                        } 
+                        else if (element.type === 'dropdown') {
+                            // Show ComfyUI's native dropdown for combo widgets
+                            const options = widget.options ? widget.options.values : [];
+                            if (options && options.length > 0) {
+                                // Create a temporary context menu
+                                const menu = new LiteGraph.ContextMenu(
+                                    options,
+                                    {
+                                        event: e,
+                                        title: widget.name,
+                                        callback: (v) => {
+                                            widget.value = v.content;
+                                            if (widget.callback) {
+                                                widget.callback(v.content);
+                                            }
+                                            this.setDirtyCanvas(true, true);
+                                        }
+                                    }
+                                );
+                            }
+                            return true;
                         }
-                        return true;
+                        else if (element.type === 'value') {
+                            // For value elements (numeric), create a temporary input overlay
+                            this.showNumberInput(widget, element, e, canvas);
+                            return true;
+                        }
                     }
                 }
             }
             return false;
+        };
+        
+        /**
+         * Show number input overlay for editing numeric values
+         */
+        nodeType.prototype.showNumberInput = function(widget, element, event, canvas) {
+            // Get canvas element - try multiple sources
+            const canvasElement = canvas || (this.graph && this.graph.canvas && this.graph.canvas.canvas) || event.target;
+            if (!canvasElement) {
+                console.warn("Cannot show number input: canvas not available");
+                return;
+            }
+            
+            // Create an input element
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = widget.value.toString();
+            input.style.position = "fixed";
+            
+            // Position the input at the click location
+            const rect = canvasElement.getBoundingClientRect();
+            input.style.left = (rect.left + element.bounds.x) + "px";
+            input.style.top = (rect.top + element.bounds.y) + "px";
+            input.style.width = element.bounds.width + "px";
+            input.style.height = element.bounds.height + "px";
+            
+            // Style the input
+            input.style.border = "2px solid #5a8fb9";
+            input.style.backgroundColor = "#2d3e4a";
+            input.style.color = "#a0c4e0";
+            input.style.fontSize = "14px";
+            input.style.fontFamily = "monospace";
+            input.style.padding = "2px 5px";
+            input.style.zIndex = "10000";
+            
+            // Add input to document
+            document.body.appendChild(input);
+            input.focus();
+            input.select();
+            
+            // Handle input completion
+            const finishInput = () => {
+                const newValue = parseFloat(input.value);
+                if (!isNaN(newValue)) {
+                    // Clamp value to widget's min/max
+                    let clampedValue = newValue;
+                    if (widget.options) {
+                        if (widget.options.min !== undefined) {
+                            clampedValue = Math.max(widget.options.min, clampedValue);
+                        }
+                        if (widget.options.max !== undefined) {
+                            clampedValue = Math.min(widget.options.max, clampedValue);
+                        }
+                    }
+                    
+                    widget.value = clampedValue;
+                    if (widget.callback) {
+                        widget.callback(clampedValue);
+                    }
+                    this.setDirtyCanvas(true, true);
+                }
+                document.body.removeChild(input);
+            };
+            
+            // Enter key or blur to finish
+            input.addEventListener("blur", finishInput);
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    finishInput();
+                } else if (e.key === "Escape") {
+                    document.body.removeChild(input);
+                }
+            });
         };
         
         /**
