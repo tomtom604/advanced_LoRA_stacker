@@ -381,16 +381,18 @@ app.registerExtension({
                     insertIdx = this.widgets.indexOf(lastWidget) + 1;
                 }
             } else {
-                // Insert before main buttons (at end)
-                const addLoraIdx = this.widgets.indexOf(this.addLoraButton);
-                insertIdx = addLoraIdx;
+                // Insert at end for ungrouped LoRAs
+                insertIdx = this.widgets.length;
                 
-                // Find last ungrouped LoRA
+                // Find last ungrouped LoRA to insert after it
                 const ungroupedLoras = this.loras.filter(l => l.group_id === null);
                 if (ungroupedLoras.length > 0) {
                     const lastLora = ungroupedLoras[ungroupedLoras.length - 1];
                     const lastWidget = lastLora.widgets[lastLora.widgets.length - 1];
-                    insertIdx = this.widgets.indexOf(lastWidget) + 1;
+                    const lastWidgetIdx = this.widgets.indexOf(lastWidget);
+                    if (lastWidgetIdx !== -1) {
+                        insertIdx = lastWidgetIdx + 1;
+                    }
                 }
             }
             
@@ -779,6 +781,7 @@ app.registerExtension({
                             text: `[${maxModelWidget.value.toFixed(2)}]`,
                             x: LAYOUT.MARGIN + 90,
                             y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            width: 60,
                             color: COLORS.text.value,
                             widget: maxModelWidget
                         });
@@ -801,6 +804,7 @@ app.registerExtension({
                             text: `[${maxClipWidget.value.toFixed(2)}]`,
                             x: nodeWidth / 2 + 70,
                             y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            width: 60,
                             color: COLORS.text.value,
                             widget: maxClipWidget
                         });
@@ -1012,19 +1016,25 @@ app.registerExtension({
                         text: lockModelWidget.value ? '[LOCK]Model' : 'Model',
                         x: LAYOUT.MARGIN + 170,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 80,
                         color: lockModelWidget.value ? COLORS.buttons.lock : COLORS.text.label,
                         widget: lockModelWidget
                     });
                     
                     if (lockModelWidget.value) {
-                        const lockValue = lora.locked_model_value || 0;
-                        row2.elements.push({
-                            type: 'value',
-                            text: `[${lockValue.toFixed(2)}]`,
-                            x: LAYOUT.MARGIN + 260,
-                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
-                            color: COLORS.text.value
-                        });
+                        // Find the locked value widget
+                        const lockedValueWidget = lora.widgets.find(w => w.name && w.name.includes('Value') && lora.widgets.indexOf(w) < lora.widgets.length / 2);
+                        if (lockedValueWidget) {
+                            row2.elements.push({
+                                type: 'value',
+                                text: `[${lockedValueWidget.value.toFixed(2)}]`,
+                                x: LAYOUT.MARGIN + 260,
+                                y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                                width: 50,
+                                color: COLORS.text.value,
+                                widget: lockedValueWidget
+                            });
+                        }
                     }
                 }
                 
@@ -1036,19 +1046,25 @@ app.registerExtension({
                         text: lockClipWidget.value ? '[LOCK]CLIP' : 'CLIP',
                         x: LAYOUT.MARGIN + 315,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 70,
                         color: lockClipWidget.value ? COLORS.buttons.lock : COLORS.text.label,
                         widget: lockClipWidget
                     });
                     
                     if (lockClipWidget.value) {
-                        const lockValue = lora.locked_clip_value || 0;
-                        row2.elements.push({
-                            type: 'value',
-                            text: `[${lockValue.toFixed(2)}]`,
-                            x: LAYOUT.MARGIN + 390,
-                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
-                            color: COLORS.text.value
-                        });
+                        // Find the locked value widget (second Value widget in the lora)
+                        const lockedValueWidget = lora.widgets.find(w => w.name && w.name.includes('Value') && lora.widgets.indexOf(w) > lora.widgets.length / 2);
+                        if (lockedValueWidget) {
+                            row2.elements.push({
+                                type: 'value',
+                                text: `[${lockedValueWidget.value.toFixed(2)}]`,
+                                x: LAYOUT.MARGIN + 390,
+                                y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                                width: 50,
+                                color: COLORS.text.value,
+                                widget: lockedValueWidget
+                            });
+                        }
                     }
                 }
             } else {
@@ -1069,6 +1085,7 @@ app.registerExtension({
                         text: `[${modelStrWidget.value.toFixed(2)}]`,
                         x: LAYOUT.MARGIN + 65,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: COLORS.text.value,
                         widget: modelStrWidget
                     });
@@ -1088,6 +1105,7 @@ app.registerExtension({
                         text: `[${minModelWidget.value.toFixed(1)}]`,
                         x: LAYOUT.MARGIN + 145,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 40,
                         color: COLORS.text.value,
                         widget: minModelWidget
                     });
@@ -1100,6 +1118,7 @@ app.registerExtension({
                         text: randomModelWidget.value ? '[RND]' : 'RND',
                         x: LAYOUT.MARGIN + 190,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: randomModelWidget.value ? COLORS.buttons.random : COLORS.text.label,
                         widget: randomModelWidget
                     });
@@ -1134,6 +1153,7 @@ app.registerExtension({
                         text: `[${clipStrWidget.value.toFixed(2)}]`,
                         x: LAYOUT.MARGIN + 50,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: COLORS.text.value,
                         widget: clipStrWidget
                     });
@@ -1153,6 +1173,7 @@ app.registerExtension({
                         text: `[${minClipWidget.value.toFixed(1)}]`,
                         x: LAYOUT.MARGIN + 130,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 40,
                         color: COLORS.text.value,
                         widget: minClipWidget
                     });
@@ -1165,6 +1186,7 @@ app.registerExtension({
                         text: randomClipWidget.value ? '[RND]' : 'RND',
                         x: LAYOUT.MARGIN + 175,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: randomClipWidget.value ? COLORS.buttons.random : COLORS.text.label,
                         widget: randomClipWidget
                     });
