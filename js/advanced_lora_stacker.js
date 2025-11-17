@@ -1,6 +1,7 @@
 /**
  * Advanced LoRA Stacker - JavaScript Frontend
  * Comprehensive UI with groups, presets, and sophisticated controls
+ * Redesigned with hybrid widget-canvas system for enhanced visual layout
  */
 
 import { app } from "../../scripts/app.js";
@@ -9,6 +10,40 @@ import { ComfyWidgets } from "../../scripts/widgets.js";
 // Store reference to available LoRAs
 let availableLoRAs = ["None"];
 let loraListPromise = null;
+
+// Color scheme constants
+const COLORS = {
+    group: {
+        background: 'rgba(45, 65, 85, 0.9)',     // Darker blue-gray
+        border: '#5a8fb9',                        // Bright blue border
+        header: 'rgba(70, 120, 170, 0.3)'        // Light blue header tint
+    },
+    lora: {
+        grouped: 'rgba(55, 75, 95, 0.7)',        // Slightly lighter than group
+        ungrouped: 'rgba(40, 50, 60, 0.8)'       // Darker for ungrouped
+    },
+    text: {
+        label: '#ffffff',                         // White for labels
+        value: '#a0c4e0',                         // Light blue for values
+        header: '#ffcc00'                         // Gold for headers
+    },
+    buttons: {
+        remove: '#ff4444',                        // Red for remove
+        add: '#44ff44',                           // Green for add
+        lock: '#ffa500',                          // Orange for lock
+        random: '#9966ff'                         // Purple for random
+    }
+};
+
+// Layout constants
+const LAYOUT = {
+    ROW_HEIGHT: 26,
+    PADDING: 4,
+    MARGIN: 10,
+    BUTTON_SIZE: 22,
+    BORDER_RADIUS: 6,
+    TITLE_BAR_HEIGHT: 40
+};
 
 /**
  * Fetch available LoRAs from ComfyUI
@@ -35,6 +70,30 @@ async function fetchLoraList() {
     return loraListPromise;
 }
 
+/**
+ * Helper function to adjust color brightness
+ */
+function adjustColorBrightness(color, amount) {
+    // Parse RGB/RGBA color
+    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+    if (!match) return color;
+    
+    let [, r, g, b, a] = match;
+    r = Math.min(255, Math.max(0, parseInt(r) + amount));
+    g = Math.min(255, Math.max(0, parseInt(g) + amount));
+    b = Math.min(255, Math.max(0, parseInt(b) + amount));
+    
+    return a ? `rgba(${r}, ${g}, ${b}, ${a})` : `rgb(${r}, ${g}, ${b})`;
+}
+
+/**
+ * Helper function to check if point is inside rectangle
+ */
+function isPointInRect(x, y, rect) {
+    return x >= rect.x && x <= rect.x + rect.width &&
+           y >= rect.y && y <= rect.y + rect.height;
+}
+
 app.registerExtension({
     name: "advanced_lora_stacker.AdvancedLoraStacker",
     
@@ -55,31 +114,17 @@ app.registerExtension({
             this.nextLoraId = 1;
             this.collapsedGroups = new Set();
             
+            // Interaction state
+            this.hoveredElement = null;
+            this.clickableElements = [];
+            
             // Set initial size
             this.setSize([450, 140]);
             this.originalSize = [450, 140];
             
             // Find the seed widget - it should already exist from INPUT_TYPES
             this.seedWidget = this.widgets.find(w => w.name === "seed");
-            
-            // Create main action buttons at the bottom
-            this.addLoraButton = this.addWidget(
-                "button",
-                "➕ Add LoRA",
-                null,
-                () => {
-                    this.addLora(null);
-                }
-            );
-            
-            this.addGroupButton = this.addWidget(
-                "button",
-                "➕ Add Group",
-                null,
-                () => {
-                    this.addGroup();
-                }
-            );
+            // Keep seed widget visible - it's a standard ComfyUI widget that users expect to interact with normally
             
             // Find stack_data widget (hidden)
             this.stackDataWidget = this.widgets.find(w => w.name === "stack_data");
@@ -96,62 +141,6 @@ app.registerExtension({
                 const data = originalSerialize ? originalSerialize.apply(this) : {};
                 this.updateStackData();
                 return data;
-            };
-            
-            // Custom draw for visual styling
-            const originalOnDrawForeground = this.onDrawForeground;
-            this.onDrawForeground = function(ctx) {
-                if (originalOnDrawForeground) {
-                    originalOnDrawForeground.apply(this, arguments);
-                }
-                
-                // Draw group containers with rounded corners
-                const widgetY = 40; // Start after title bar
-                let currentY = widgetY;
-                
-                for (const group of this.groups) {
-                    const collapsed = this.collapsedGroups.has(group.id);
-                    
-                    // Calculate container bounds
-                    let groupHeight = 10; // Padding
-                    const groupWidgets = this.getGroupWidgets(group.id);
-                    
-                    for (const widget of groupWidgets) {
-                        if (collapsed && widget.groupWidget && widget !== groupWidgets[0]) {
-                            continue; // Skip collapsed widgets
-                        }
-                        const size = widget.computeSize ? widget.computeSize(this.size[0]) : [0, 30];
-                        if (size[1] > 0) {
-                            groupHeight += size[1] + 4;
-                        }
-                    }
-                    
-                    // Draw rounded container
-                    ctx.fillStyle = "#1a2a3a";
-                    ctx.strokeStyle = "#3a5a7a";
-                    ctx.lineWidth = 2;
-                    
-                    const x = 15;
-                    const y = currentY;
-                    const width = this.size[0] - 30;
-                    const height = groupHeight;
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(x + 6, y);
-                    ctx.lineTo(x + width - 6, y);
-                    ctx.quadraticCurveTo(x + width, y, x + width, y + 6);
-                    ctx.lineTo(x + width, y + height - 6);
-                    ctx.quadraticCurveTo(x + width, y + height, x + width - 6, y + height);
-                    ctx.lineTo(x + 6, y + height);
-                    ctx.quadraticCurveTo(x, y + height, x, y + height - 6);
-                    ctx.lineTo(x, y + 6);
-                    ctx.quadraticCurveTo(x, y, x + 6, y);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                    
-                    currentY += groupHeight + 10;
-                }
             };
             
             return r;
@@ -207,12 +196,13 @@ app.registerExtension({
                 }
             }
             
-            // Group header with collapse toggle and remove button
+            // Group header with collapse toggle and remove button (invisible - rendered on canvas)
             const headerWidget = this.addWidget("button", `▼ group_${groupIndex}`, null, () => {
                 this.toggleGroupCollapse(groupId);
             });
             headerWidget.groupWidget = true;
             headerWidget.groupId = groupId;
+            headerWidget.computeSize = () => [0, -4]; // Make invisible
             group.widgets.push(headerWidget);
             
             // Remove group button (inline with header conceptually)
@@ -221,6 +211,7 @@ app.registerExtension({
             });
             removeBtn.groupWidget = true;
             removeBtn.groupId = groupId;
+            removeBtn.computeSize = () => [0, -4]; // Make invisible
             group.widgets.push(removeBtn);
             
             // Max Model strength
@@ -229,6 +220,7 @@ app.registerExtension({
             maxModelWidget.widget.value = 1.0;
             maxModelWidget.widget.groupWidget = true;
             maxModelWidget.widget.groupId = groupId;
+            maxModelWidget.widget.computeSize = () => [0, -4]; // Make invisible
             maxModelWidget.widget.callback = () => {
                 group.max_model = maxModelWidget.widget.value;
                 this.updateStackData();
@@ -241,6 +233,7 @@ app.registerExtension({
             maxClipWidget.widget.value = 1.0;
             maxClipWidget.widget.groupWidget = true;
             maxClipWidget.widget.groupId = groupId;
+            maxClipWidget.widget.computeSize = () => [0, -4]; // Make invisible
             maxClipWidget.widget.callback = () => {
                 group.max_clip = maxClipWidget.widget.value;
                 this.updateStackData();
@@ -253,6 +246,7 @@ app.registerExtension({
             });
             addLoraBtn.groupWidget = true;
             addLoraBtn.groupId = groupId;
+            addLoraBtn.computeSize = () => [0, -4]; // Make invisible
             group.widgets.push(addLoraBtn);
             
             // Move widgets to correct position
@@ -325,36 +319,16 @@ app.registerExtension({
                 this.collapsedGroups.add(groupId);
             }
             
-            // Update header button
+            // Update header button text
             const headerWidget = group.widgets.find(w => w.name.includes('group_'));
             if (headerWidget) {
                 headerWidget.name = `${wasCollapsed ? '▼' : '▶'} group_${group.index}`;
             }
             
-            // Toggle visibility of group widgets (except header and remove button)
-            for (let i = 2; i < group.widgets.length; i++) {
-                const widget = group.widgets[i];
-                if (wasCollapsed) {
-                    delete widget.computeSize;
-                } else {
-                    widget.computeSize = () => [0, -4];
-                }
-            }
-            
-            // Toggle visibility of group LoRAs
-            const groupLoRAs = this.loras.filter(l => l.group_id === groupId);
-            for (const lora of groupLoRAs) {
-                for (const widget of lora.widgets) {
-                    if (wasCollapsed) {
-                        delete widget.computeSize;
-                    } else {
-                        widget.computeSize = () => [0, -4];
-                    }
-                }
-            }
-            
-            // Adjust size
+            // Update stack data and redraw
+            this.updateStackData();
             this.setSize(this.computeSize());
+            this.setDirtyCanvas(true, true);
         };
         
         /**
@@ -425,6 +399,7 @@ app.registerExtension({
                 lora.name = value;
                 this.updateStackData();
             }, { values: availableLoRAs });
+            loraWidget.computeSize = () => [0, -4]; // Make invisible
             if (groupId) {
                 loraWidget.groupWidget = true;
                 loraWidget.groupId = groupId;
@@ -435,6 +410,7 @@ app.registerExtension({
             const removeBtn = this.addWidget("button", "✕", null, () => {
                 this.removeLora(loraId);
             });
+            removeBtn.computeSize = () => [0, -4]; // Make invisible
             if (groupId) {
                 removeBtn.groupWidget = true;
                 removeBtn.groupId = groupId;
@@ -446,6 +422,7 @@ app.registerExtension({
                 lora.preset = value;
                 this.updateStackData();
             }, { values: ["Full", "Character", "Style", "Concept", "Fix Hands"] });
+            presetWidget.computeSize = () => [0, -4]; // Make invisible
             if (groupId) {
                 presetWidget.groupWidget = true;
                 presetWidget.groupId = groupId;
@@ -461,14 +438,11 @@ app.registerExtension({
                 lockModelWidget.widget.value = false;
                 lockModelWidget.widget.groupWidget = true;
                 lockModelWidget.widget.groupId = groupId;
+                lockModelWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 lockModelWidget.widget.callback = (value) => {
                     lora.lock_model = value;
-                    if (value) {
-                        lockedModelValueWidget.computeSize = undefined;
-                    } else {
-                        lockedModelValueWidget.computeSize = () => [0, -4];
-                    }
                     this.updateStackData();
+                    this.setDirtyCanvas(true, true);
                 };
                 lora.widgets.push(lockModelWidget.widget);
                 
@@ -478,7 +452,7 @@ app.registerExtension({
                 lockedModelValueWidget.widget.value = 0.0;
                 lockedModelValueWidget.widget.groupWidget = true;
                 lockedModelValueWidget.widget.groupId = groupId;
-                lockedModelValueWidget.widget.computeSize = () => [0, -4]; // Hidden by default
+                lockedModelValueWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 lockedModelValueWidget.widget.callback = (value) => {
                     lora.locked_model_value = value;
                     this.updateStackData();
@@ -491,14 +465,11 @@ app.registerExtension({
                 lockClipWidget.widget.value = false;
                 lockClipWidget.widget.groupWidget = true;
                 lockClipWidget.widget.groupId = groupId;
+                lockClipWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 lockClipWidget.widget.callback = (value) => {
                     lora.lock_clip = value;
-                    if (value) {
-                        lockedClipValueWidget.computeSize = undefined;
-                    } else {
-                        lockedClipValueWidget.computeSize = () => [0, -4];
-                    }
                     this.updateStackData();
+                    this.setDirtyCanvas(true, true);
                 };
                 lora.widgets.push(lockClipWidget.widget);
                 
@@ -508,7 +479,7 @@ app.registerExtension({
                 lockedClipValueWidget.widget.value = 0.0;
                 lockedClipValueWidget.widget.groupWidget = true;
                 lockedClipValueWidget.widget.groupId = groupId;
-                lockedClipValueWidget.widget.computeSize = () => [0, -4]; // Hidden by default
+                lockedClipValueWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 lockedClipValueWidget.widget.callback = (value) => {
                     lora.locked_clip_value = value;
                     this.updateStackData();
@@ -522,6 +493,7 @@ app.registerExtension({
                 const modelStrWidget = ComfyWidgets.FLOAT(this, "model_strength", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
                 modelStrWidget.widget.name = "MODEL Str";
                 modelStrWidget.widget.value = 1.0;
+                modelStrWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 modelStrWidget.widget.callback = (value) => {
                     lora.model_strength = value;
                     this.updateStackData();
@@ -532,16 +504,11 @@ app.registerExtension({
                 const randomModelWidget = ComfyWidgets.BOOLEAN(this, "random_model", ["BOOLEAN", {default: false}], app);
                 randomModelWidget.widget.name = "  🎲 Random";
                 randomModelWidget.widget.value = false;
+                randomModelWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 randomModelWidget.widget.callback = (value) => {
                     lora.random_model = value;
-                    if (value) {
-                        minModelWidget.computeSize = undefined;
-                        maxModelWidget.computeSize = undefined;
-                    } else {
-                        minModelWidget.computeSize = () => [0, -4];
-                        maxModelWidget.computeSize = () => [0, -4];
-                    }
                     this.updateStackData();
+                    this.setDirtyCanvas(true, true);
                 };
                 lora.widgets.push(randomModelWidget.widget);
                 
@@ -549,7 +516,7 @@ app.registerExtension({
                 const minModelWidget = ComfyWidgets.FLOAT(this, "min_model", ["FLOAT", {default: 0.0, min: 0.0, max: 10.0, step: 0.01}], app);
                 minModelWidget.widget.name = "    Min";
                 minModelWidget.widget.value = 0.0;
-                minModelWidget.widget.computeSize = () => [0, -4]; // Hidden by default
+                minModelWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 minModelWidget.widget.callback = (value) => {
                     lora.min_model = value;
                     this.updateStackData();
@@ -560,7 +527,7 @@ app.registerExtension({
                 const maxModelWidget = ComfyWidgets.FLOAT(this, "max_model", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
                 maxModelWidget.widget.name = "    Max";
                 maxModelWidget.widget.value = 1.0;
-                maxModelWidget.widget.computeSize = () => [0, -4]; // Hidden by default
+                maxModelWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 maxModelWidget.widget.callback = (value) => {
                     lora.max_model = value;
                     this.updateStackData();
@@ -571,6 +538,7 @@ app.registerExtension({
                 const clipStrWidget = ComfyWidgets.FLOAT(this, "clip_strength", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
                 clipStrWidget.widget.name = "CLIP Str";
                 clipStrWidget.widget.value = 1.0;
+                clipStrWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 clipStrWidget.widget.callback = (value) => {
                     lora.clip_strength = value;
                     this.updateStackData();
@@ -581,16 +549,11 @@ app.registerExtension({
                 const randomClipWidget = ComfyWidgets.BOOLEAN(this, "random_clip", ["BOOLEAN", {default: false}], app);
                 randomClipWidget.widget.name = "  🎲 Random";
                 randomClipWidget.widget.value = false;
+                randomClipWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 randomClipWidget.widget.callback = (value) => {
                     lora.random_clip = value;
-                    if (value) {
-                        minClipWidget.computeSize = undefined;
-                        maxClipWidget.computeSize = undefined;
-                    } else {
-                        minClipWidget.computeSize = () => [0, -4];
-                        maxClipWidget.computeSize = () => [0, -4];
-                    }
                     this.updateStackData();
+                    this.setDirtyCanvas(true, true);
                 };
                 lora.widgets.push(randomClipWidget.widget);
                 
@@ -598,7 +561,7 @@ app.registerExtension({
                 const minClipWidget = ComfyWidgets.FLOAT(this, "min_clip", ["FLOAT", {default: 0.0, min: 0.0, max: 10.0, step: 0.01}], app);
                 minClipWidget.widget.name = "    Min";
                 minClipWidget.widget.value = 0.0;
-                minClipWidget.widget.computeSize = () => [0, -4]; // Hidden by default
+                minClipWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 minClipWidget.widget.callback = (value) => {
                     lora.min_clip = value;
                     this.updateStackData();
@@ -609,7 +572,7 @@ app.registerExtension({
                 const maxClipWidget = ComfyWidgets.FLOAT(this, "max_clip", ["FLOAT", {default: 1.0, min: 0.0, max: 10.0, step: 0.01}], app);
                 maxClipWidget.widget.name = "    Max";
                 maxClipWidget.widget.value = 1.0;
-                maxClipWidget.widget.computeSize = () => [0, -4]; // Hidden by default
+                maxClipWidget.widget.computeSize = () => [0, -4]; // Make invisible
                 maxClipWidget.widget.callback = (value) => {
                     lora.max_clip = value;
                     this.updateStackData();
@@ -710,34 +673,781 @@ app.registerExtension({
          * Override computeSize to calculate proper node size
          */
         nodeType.prototype.computeSize = function(out) {
-            let height = 10; // Top padding
-            let maxWidth = 450;
+            const layout = this.calculateLayout ? this.calculateLayout() : null;
+            const height = layout ? layout.totalHeight + 20 : 140;
+            const width = 450;
             
-            // Calculate height based on all visible widgets
-            // Check if widgets array exists and is iterable
-            if (this.widgets && Array.isArray(this.widgets)) {
-                for (const widget of this.widgets) {
-                    if (widget.computeSize) {
-                        const size = widget.computeSize(maxWidth);
-                        if (size && size[1] > 0) {
-                            height += size[1] + 4;
-                        }
-                    } else if (!widget.type || widget.type !== "hidden") {
-                        // Standard widget height
-                        height += 34;
-                    }
-                }
-            }
-            
-            height += 10; // Bottom padding
-            
-            const size = [maxWidth, Math.max(140, height)];
+            const size = [width, Math.max(140, height)];
             if (out) {
                 out[0] = size[0];
                 out[1] = size[1];
                 return out;
             }
             return size;
+        };
+        
+        /**
+         * Calculate layout for all elements (groups, loras, buttons)
+         */
+        nodeType.prototype.calculateLayout = function() {
+            const rows = [];
+            const containers = []; // Store containers separately to draw first
+            this.clickableElements = [];
+            
+            let currentY = LAYOUT.TITLE_BAR_HEIGHT;
+            const nodeWidth = this.size[0];
+            const contentWidth = nodeWidth - (LAYOUT.MARGIN * 2);
+            
+            // Render groups
+            for (const group of this.groups) {
+                const collapsed = this.collapsedGroups.has(group.id);
+                const groupStartY = currentY;
+                
+                // Group header row
+                const headerRow = {
+                    y: currentY,
+                    height: LAYOUT.ROW_HEIGHT,
+                    background: COLORS.group.header,
+                    elements: []
+                };
+                
+                // Collapse/expand toggle
+                headerRow.elements.push({
+                    type: 'button',
+                    text: collapsed ? '>' : 'v',
+                    x: LAYOUT.MARGIN,
+                    y: currentY,
+                    width: LAYOUT.BUTTON_SIZE,
+                    height: LAYOUT.ROW_HEIGHT,
+                    color: COLORS.text.header,
+                    action: () => this.toggleGroupCollapse(group.id)
+                });
+                
+                // Group title
+                headerRow.elements.push({
+                    type: 'label',
+                    text: `GROUP ${group.index}`,
+                    x: LAYOUT.MARGIN + LAYOUT.BUTTON_SIZE + 5,
+                    y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                    color: COLORS.text.header,
+                    bold: true
+                });
+                
+                // Remove group button
+                headerRow.elements.push({
+                    type: 'button',
+                    text: 'X',
+                    x: nodeWidth - LAYOUT.MARGIN - LAYOUT.BUTTON_SIZE,
+                    y: currentY,
+                    width: LAYOUT.BUTTON_SIZE,
+                    height: LAYOUT.ROW_HEIGHT,
+                    color: COLORS.buttons.remove,
+                    action: () => this.removeGroup(group.id)
+                });
+                
+                rows.push(headerRow);
+                currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+                
+                if (!collapsed) {
+                    // Group controls row
+                    const controlsRow = {
+                        y: currentY,
+                        height: LAYOUT.ROW_HEIGHT,
+                        background: COLORS.group.background,
+                        elements: []
+                    };
+                    
+                    // Max Model label
+                    controlsRow.elements.push({
+                        type: 'label',
+                        text: 'Max Model:',
+                        x: LAYOUT.MARGIN + 10,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.label
+                    });
+                    
+                    // Max Model value
+                    const maxModelWidget = group.widgets.find(w => w.name && w.name.includes('Max MODEL'));
+                    if (maxModelWidget) {
+                        controlsRow.elements.push({
+                            type: 'value',
+                            text: `[${maxModelWidget.value.toFixed(2)}]`,
+                            x: LAYOUT.MARGIN + 90,
+                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            color: COLORS.text.value,
+                            widget: maxModelWidget
+                        });
+                    }
+                    
+                    // Max CLIP label
+                    controlsRow.elements.push({
+                        type: 'label',
+                        text: 'Max CLIP:',
+                        x: nodeWidth / 2,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.label
+                    });
+                    
+                    // Max CLIP value
+                    const maxClipWidget = group.widgets.find(w => w.name && w.name.includes('Max CLIP'));
+                    if (maxClipWidget) {
+                        controlsRow.elements.push({
+                            type: 'value',
+                            text: `[${maxClipWidget.value.toFixed(2)}]`,
+                            x: nodeWidth / 2 + 70,
+                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            color: COLORS.text.value,
+                            widget: maxClipWidget
+                        });
+                    }
+                    
+                    rows.push(controlsRow);
+                    currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+                    
+                    // Group LoRAs
+                    const groupLoras = this.loras.filter(l => l.group_id === group.id);
+                    for (const lora of groupLoras) {
+                        currentY = this.addLoraRows(rows, lora, currentY, nodeWidth, true, containers);
+                    }
+                    
+                    // Add LoRA button row
+                    const addRow = {
+                        y: currentY,
+                        height: LAYOUT.ROW_HEIGHT,
+                        background: COLORS.group.background,
+                        elements: []
+                    };
+                    
+                    addRow.elements.push({
+                        type: 'button',
+                        text: '+ Add LoRA',
+                        x: LAYOUT.MARGIN + 10,
+                        y: currentY,
+                        width: contentWidth - 20,
+                        height: LAYOUT.ROW_HEIGHT,
+                        color: COLORS.buttons.add,
+                        action: () => this.addLora(group.id)
+                    });
+                    
+                    rows.push(addRow);
+                    currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+                }
+                
+                // Add group container to be drawn first
+                containers.push({
+                    y: groupStartY,
+                    height: currentY - groupStartY,
+                    isContainer: true,
+                    background: COLORS.group.background,
+                    border: COLORS.group.border,
+                    x: LAYOUT.MARGIN,
+                    width: contentWidth
+                });
+                
+                currentY += LAYOUT.PADDING;
+            }
+            
+            // Ungrouped LoRAs
+            const ungroupedLoras = this.loras.filter(l => l.group_id === null);
+            if (ungroupedLoras.length > 0) {
+                for (const lora of ungroupedLoras) {
+                    currentY = this.addLoraRows(rows, lora, currentY, nodeWidth, false, containers);
+                }
+            }
+            
+            // Main action buttons
+            const buttonRow = {
+                y: currentY,
+                height: LAYOUT.ROW_HEIGHT,
+                elements: []
+            };
+            
+            const halfWidth = contentWidth / 2 - LAYOUT.PADDING;
+            
+            buttonRow.elements.push({
+                type: 'button',
+                text: '+ Add LoRA',
+                x: LAYOUT.MARGIN,
+                y: currentY,
+                width: halfWidth,
+                height: LAYOUT.ROW_HEIGHT,
+                color: COLORS.buttons.add,
+                action: () => this.addLora(null)
+            });
+            
+            buttonRow.elements.push({
+                type: 'button',
+                text: '+ Add Group',
+                x: LAYOUT.MARGIN + halfWidth + LAYOUT.PADDING,
+                y: currentY,
+                width: halfWidth,
+                height: LAYOUT.ROW_HEIGHT,
+                color: COLORS.buttons.add,
+                action: () => this.addGroup()
+            });
+            
+            rows.push(buttonRow);
+            currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+            
+            // Store clickable elements
+            for (const row of rows) {
+                if (row.elements) {
+                    for (const element of row.elements) {
+                        if (element.action || element.widget) {
+                            this.clickableElements.push({
+                                ...element,
+                                bounds: {
+                                    x: element.x,
+                                    y: element.y,
+                                    width: element.width || 60,
+                                    height: element.height || LAYOUT.ROW_HEIGHT
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+            
+            return { rows, containers, totalHeight: currentY };
+        };
+        
+        /**
+         * Add rows for a single LoRA
+         */
+        nodeType.prototype.addLoraRows = function(rows, lora, currentY, nodeWidth, isGrouped, containers) {
+            const loraStartY = currentY;
+            const contentWidth = nodeWidth - (LAYOUT.MARGIN * 2);
+            const backgroundColor = isGrouped ? COLORS.lora.grouped : COLORS.lora.ungrouped;
+            
+            // Row 1: LoRA selector + Remove button
+            const row1 = {
+                y: currentY,
+                height: LAYOUT.ROW_HEIGHT,
+                background: backgroundColor,
+                elements: []
+            };
+            
+            const loraWidget = lora.widgets.find(w => w.name && w.name.includes('LoRA'));
+            if (loraWidget) {
+                row1.elements.push({
+                    type: 'dropdown',
+                    text: loraWidget.value || 'None',
+                    x: LAYOUT.MARGIN + (isGrouped ? 20 : 10),
+                    y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                    width: contentWidth - 60,
+                    color: COLORS.text.value,
+                    widget: loraWidget
+                });
+            }
+            
+            row1.elements.push({
+                type: 'button',
+                text: 'X',
+                x: nodeWidth - LAYOUT.MARGIN - LAYOUT.BUTTON_SIZE,
+                y: currentY,
+                width: LAYOUT.BUTTON_SIZE,
+                height: LAYOUT.ROW_HEIGHT,
+                color: COLORS.buttons.remove,
+                action: () => this.removeLora(lora.id)
+            });
+            
+            rows.push(row1);
+            currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+            
+            // Row 2: Different content for grouped vs ungrouped
+            const row2 = {
+                y: currentY,
+                height: LAYOUT.ROW_HEIGHT,
+                background: backgroundColor,
+                elements: []
+            };
+            
+            const presetWidget = lora.widgets.find(w => w.name && w.name.includes('Type'));
+            
+            if (isGrouped) {
+                // Grouped: Type + Lock controls
+                row2.elements.push({
+                    type: 'label',
+                    text: 'Type:',
+                    x: LAYOUT.MARGIN + 20,
+                    y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                    color: COLORS.text.label
+                });
+                
+                if (presetWidget) {
+                    row2.elements.push({
+                        type: 'dropdown',
+                        text: presetWidget.value || 'Full',
+                        x: LAYOUT.MARGIN + 60,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 100,
+                        color: COLORS.text.value,
+                        widget: presetWidget
+                    });
+                }
+                
+                // Lock MODEL
+                const lockModelWidget = lora.widgets.find(w => w.name && w.name.includes('🔒 MODEL'));
+                if (lockModelWidget) {
+                    row2.elements.push({
+                        type: 'toggle',
+                        text: lockModelWidget.value ? '[LOCK]Model' : 'Model',
+                        x: LAYOUT.MARGIN + 170,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: lockModelWidget.value ? COLORS.buttons.lock : COLORS.text.label,
+                        widget: lockModelWidget
+                    });
+                    
+                    if (lockModelWidget.value) {
+                        const lockValue = lora.locked_model_value || 0;
+                        row2.elements.push({
+                            type: 'value',
+                            text: `[${lockValue.toFixed(2)}]`,
+                            x: LAYOUT.MARGIN + 260,
+                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            color: COLORS.text.value
+                        });
+                    }
+                }
+                
+                // Lock CLIP
+                const lockClipWidget = lora.widgets.find(w => w.name && w.name.includes('🔒 CLIP'));
+                if (lockClipWidget) {
+                    row2.elements.push({
+                        type: 'toggle',
+                        text: lockClipWidget.value ? '[LOCK]CLIP' : 'CLIP',
+                        x: LAYOUT.MARGIN + 315,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: lockClipWidget.value ? COLORS.buttons.lock : COLORS.text.label,
+                        widget: lockClipWidget
+                    });
+                    
+                    if (lockClipWidget.value) {
+                        const lockValue = lora.locked_clip_value || 0;
+                        row2.elements.push({
+                            type: 'value',
+                            text: `[${lockValue.toFixed(2)}]`,
+                            x: LAYOUT.MARGIN + 390,
+                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            color: COLORS.text.value
+                        });
+                    }
+                }
+            } else {
+                // Ungrouped: MODEL controls on row 2
+                row2.elements.push({
+                    type: 'label',
+                    text: 'MODEL:',
+                    x: LAYOUT.MARGIN + 10,
+                    y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                    color: COLORS.text.label,
+                    bold: true
+                });
+                
+                const modelStrWidget = lora.widgets.find(w => w.name === 'MODEL Str');
+                if (modelStrWidget) {
+                    row2.elements.push({
+                        type: 'value',
+                        text: `[${modelStrWidget.value.toFixed(2)}]`,
+                        x: LAYOUT.MARGIN + 65,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.value,
+                        widget: modelStrWidget
+                    });
+                }
+                
+                const minModelWidget = lora.widgets.find(w => w.name === '    Min' && lora.widgets.indexOf(w) < lora.widgets.length / 2);
+                if (minModelWidget) {
+                    row2.elements.push({
+                        type: 'label',
+                        text: 'Min:',
+                        x: LAYOUT.MARGIN + 115,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.label
+                    });
+                    row2.elements.push({
+                        type: 'value',
+                        text: `[${minModelWidget.value.toFixed(1)}]`,
+                        x: LAYOUT.MARGIN + 145,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.value,
+                        widget: minModelWidget
+                    });
+                }
+                
+                const randomModelWidget = lora.widgets.find(w => w.name === '  🎲 Random' && lora.widgets.indexOf(w) < lora.widgets.length / 2);
+                if (randomModelWidget) {
+                    row2.elements.push({
+                        type: 'toggle',
+                        text: randomModelWidget.value ? '[RND]' : 'RND',
+                        x: LAYOUT.MARGIN + 190,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: randomModelWidget.value ? COLORS.buttons.random : COLORS.text.label,
+                        widget: randomModelWidget
+                    });
+                }
+            }
+            
+            rows.push(row2);
+            currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+            
+            // Row 3 for ungrouped: CLIP controls and Type
+            if (!isGrouped) {
+                const row3 = {
+                    y: currentY,
+                    height: LAYOUT.ROW_HEIGHT,
+                    background: backgroundColor,
+                    elements: []
+                };
+                
+                row3.elements.push({
+                    type: 'label',
+                    text: 'CLIP:',
+                    x: LAYOUT.MARGIN + 10,
+                    y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                    color: COLORS.text.label,
+                    bold: true
+                });
+                
+                const clipStrWidget = lora.widgets.find(w => w.name === 'CLIP Str');
+                if (clipStrWidget) {
+                    row3.elements.push({
+                        type: 'value',
+                        text: `[${clipStrWidget.value.toFixed(2)}]`,
+                        x: LAYOUT.MARGIN + 50,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.value,
+                        widget: clipStrWidget
+                    });
+                }
+                
+                const minClipWidget = lora.widgets.find(w => w.name === '    Min' && lora.widgets.indexOf(w) > lora.widgets.length / 2);
+                if (minClipWidget) {
+                    row3.elements.push({
+                        type: 'label',
+                        text: 'Min:',
+                        x: LAYOUT.MARGIN + 100,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.label
+                    });
+                    row3.elements.push({
+                        type: 'value',
+                        text: `[${minClipWidget.value.toFixed(1)}]`,
+                        x: LAYOUT.MARGIN + 130,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: COLORS.text.value,
+                        widget: minClipWidget
+                    });
+                }
+                
+                const randomClipWidget = lora.widgets.find(w => w.name === '  🎲 Random' && lora.widgets.indexOf(w) > lora.widgets.length / 2);
+                if (randomClipWidget) {
+                    row3.elements.push({
+                        type: 'toggle',
+                        text: randomClipWidget.value ? '[RND]' : 'RND',
+                        x: LAYOUT.MARGIN + 175,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        color: randomClipWidget.value ? COLORS.buttons.random : COLORS.text.label,
+                        widget: randomClipWidget
+                    });
+                }
+                
+                rows.push(row3);
+                currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+                
+                // Row 4: Type
+                const row4 = {
+                    y: currentY,
+                    height: LAYOUT.ROW_HEIGHT,
+                    background: backgroundColor,
+                    elements: []
+                };
+                
+                row4.elements.push({
+                    type: 'label',
+                    text: 'Type:',
+                    x: LAYOUT.MARGIN + 10,
+                    y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                    color: COLORS.text.label
+                });
+                
+                if (presetWidget) {
+                    row4.elements.push({
+                        type: 'dropdown',
+                        text: presetWidget.value || 'Full',
+                        x: LAYOUT.MARGIN + 50,
+                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 150,
+                        color: COLORS.text.value,
+                        widget: presetWidget
+                    });
+                }
+                
+                rows.push(row4);
+                currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
+            }
+            
+            // Add LoRA container to be drawn first
+            if (containers) {
+                containers.push({
+                    y: loraStartY,
+                    height: currentY - loraStartY,
+                    isContainer: true,
+                    background: backgroundColor,
+                    x: LAYOUT.MARGIN + (isGrouped ? 10 : 0),
+                    width: contentWidth - (isGrouped ? 10 : 0)
+                });
+            }
+            
+            return currentY;
+        };
+        
+        /**
+         * Draw rounded rectangle
+         */
+        nodeType.prototype.drawRoundedRect = function(ctx, x, y, width, height, radius, fillColor, strokeColor) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            
+            if (fillColor) {
+                const gradient = ctx.createLinearGradient(x, y, x, y + height);
+                gradient.addColorStop(0, fillColor);
+                gradient.addColorStop(1, adjustColorBrightness(fillColor, -20));
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            }
+            
+            if (strokeColor) {
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        };
+        
+        /**
+         * Custom rendering function
+         */
+        nodeType.prototype.onDrawForeground = function(ctx) {
+            if (!this.calculateLayout) return;
+            
+            const layout = this.calculateLayout();
+            
+            // Draw containers first (background)
+            if (layout.containers) {
+                for (const container of layout.containers) {
+                    this.drawRoundedRect(
+                        ctx,
+                        container.x,
+                        container.y,
+                        container.width,
+                        container.height,
+                        LAYOUT.BORDER_RADIUS,
+                        container.background,
+                        container.border
+                    );
+                }
+            }
+            
+            // Draw row backgrounds and elements
+            for (const row of layout.rows) {
+                
+                // Draw row background if specified
+                if (row.background && !row.isContainer) {
+                    ctx.fillStyle = row.background;
+                    ctx.fillRect(0, row.y, this.size[0], row.height);
+                }
+                
+                // Draw elements
+                if (row.elements) {
+                    for (const element of row.elements) {
+                        this.drawElement(ctx, element);
+                    }
+                }
+            }
+        };
+        
+        /**
+         * Draw a single element
+         */
+        nodeType.prototype.drawElement = function(ctx, element) {
+            const isHovered = this.hoveredElement === element;
+            
+            // Enable better text rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            switch (element.type) {
+                case 'label':
+                    ctx.font = element.bold ? 'bold 14px sans-serif' : '14px sans-serif';
+                    ctx.fillStyle = element.color || COLORS.text.label;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillText(element.text, element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    break;
+                    
+                case 'value':
+                    ctx.font = '14px monospace';
+                    ctx.fillStyle = element.color || COLORS.text.value;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillText(element.text, element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    break;
+                    
+                case 'button':
+                    const btnColor = isHovered ? adjustColorBrightness(element.color, 30) : element.color;
+                    this.drawRoundedRect(
+                        ctx,
+                        element.x,
+                        element.y + 2,
+                        element.width,
+                        element.height - 4,
+                        3,
+                        btnColor,
+                        null
+                    );
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    // Add text shadow for button text
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                    ctx.shadowBlur = 2;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillText(element.text, element.x + element.width / 2, element.y + element.height / 2);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    break;
+                    
+                case 'dropdown':
+                    ctx.font = '14px sans-serif';
+                    ctx.fillStyle = element.color || COLORS.text.value;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    const displayText = element.text.length > 30 ? element.text.substring(0, 27) + '...' : element.text;
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillText('[' + displayText + ']', element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    break;
+                    
+                case 'toggle':
+                    ctx.font = 'bold 13px sans-serif';
+                    ctx.fillStyle = element.color;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillText(element.text, element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    break;
+            }
+        };
+        
+        /**
+         * Handle mouse down events
+         */
+        nodeType.prototype.onMouseDown = function(e, localPos) {
+            for (const element of this.clickableElements) {
+                if (isPointInRect(localPos[0], localPos[1], element.bounds)) {
+                    if (element.action) {
+                        element.action();
+                        this.setDirtyCanvas(true, true);
+                        return true;
+                    }
+                    if (element.widget) {
+                        // Trigger widget callback
+                        if (element.widget.callback) {
+                            // For combo widgets, we'd need to show a popup, but for now just cycle
+                            // For boolean widgets, toggle
+                            if (element.widget.type === 'toggle' || element.widget.type === 'boolean') {
+                                element.widget.value = !element.widget.value;
+                                element.widget.callback(element.widget.value);
+                                this.setDirtyCanvas(true, true);
+                            }
+                        }
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        
+        /**
+         * Handle mouse move events for hover effects
+         */
+        nodeType.prototype.onMouseMove = function(e, localPos) {
+            let foundHover = false;
+            
+            for (const element of this.clickableElements) {
+                if (isPointInRect(localPos[0], localPos[1], element.bounds)) {
+                    if (this.hoveredElement !== element) {
+                        this.hoveredElement = element;
+                        this.setDirtyCanvas(true, false);
+                    }
+                    foundHover = true;
+                    if (this.canvas) {
+                        this.canvas.style.cursor = 'pointer';
+                    }
+                    break;
+                }
+            }
+            
+            if (!foundHover) {
+                if (this.hoveredElement) {
+                    this.hoveredElement = null;
+                    this.setDirtyCanvas(true, false);
+                }
+                if (this.canvas) {
+                    this.canvas.style.cursor = 'default';
+                }
+            }
         };
     }
 });
