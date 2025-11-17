@@ -1529,18 +1529,40 @@ app.registerExtension({
                 return;
             }
             
+            // Get canvas context for coordinate transformation
+            const graphCanvas = this.graph && this.graph.canvas;
+            if (!graphCanvas) {
+                console.warn("Cannot show number input: graph canvas not available");
+                return;
+            }
+            
             // Create an input element
             const input = document.createElement("input");
             input.type = "text";
             input.value = widget.value.toString();
             input.style.position = "fixed";
             
-            // Position the input at the click location
+            // Convert node-local coordinates to canvas coordinates
+            // element.bounds has x,y relative to the node
+            // We need to add the node's position and account for canvas offset/scale
+            const nodeX = this.pos[0];
+            const nodeY = this.pos[1];
+            const canvasX = nodeX + element.bounds.x;
+            const canvasY = nodeY + element.bounds.y;
+            
+            // Transform canvas coordinates to screen coordinates
             const rect = canvasElement.getBoundingClientRect();
-            input.style.left = (rect.left + element.bounds.x) + "px";
-            input.style.top = (rect.top + element.bounds.y) + "px";
-            input.style.width = element.bounds.width + "px";
-            input.style.height = element.bounds.height + "px";
+            const scale = graphCanvas.ds ? graphCanvas.ds.scale : 1.0;
+            const offsetX = graphCanvas.ds ? graphCanvas.ds.offset[0] : 0;
+            const offsetY = graphCanvas.ds ? graphCanvas.ds.offset[1] : 0;
+            
+            const screenX = rect.left + (canvasX + offsetX) * scale;
+            const screenY = rect.top + (canvasY + offsetY) * scale;
+            
+            input.style.left = screenX + "px";
+            input.style.top = screenY + "px";
+            input.style.width = (element.bounds.width * scale) + "px";
+            input.style.height = (element.bounds.height * scale) + "px";
             
             // Style the input
             input.style.border = "2px solid #5a8fb9";
