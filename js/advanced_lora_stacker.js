@@ -381,16 +381,18 @@ app.registerExtension({
                     insertIdx = this.widgets.indexOf(lastWidget) + 1;
                 }
             } else {
-                // Insert before main buttons (at end)
-                const addLoraIdx = this.widgets.indexOf(this.addLoraButton);
-                insertIdx = addLoraIdx;
+                // Insert at end for ungrouped LoRAs
+                insertIdx = this.widgets.length;
                 
-                // Find last ungrouped LoRA
+                // Find last ungrouped LoRA to insert after it
                 const ungroupedLoras = this.loras.filter(l => l.group_id === null);
                 if (ungroupedLoras.length > 0) {
                     const lastLora = ungroupedLoras[ungroupedLoras.length - 1];
                     const lastWidget = lastLora.widgets[lastLora.widgets.length - 1];
-                    insertIdx = this.widgets.indexOf(lastWidget) + 1;
+                    const lastWidgetIdx = this.widgets.indexOf(lastWidget);
+                    if (lastWidgetIdx !== -1) {
+                        insertIdx = lastWidgetIdx + 1;
+                    }
                 }
             }
             
@@ -779,6 +781,7 @@ app.registerExtension({
                             text: `[${maxModelWidget.value.toFixed(2)}]`,
                             x: LAYOUT.MARGIN + 90,
                             y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            width: 60,
                             color: COLORS.text.value,
                             widget: maxModelWidget
                         });
@@ -801,6 +804,7 @@ app.registerExtension({
                             text: `[${maxClipWidget.value.toFixed(2)}]`,
                             x: nodeWidth / 2 + 70,
                             y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            width: 60,
                             color: COLORS.text.value,
                             widget: maxClipWidget
                         });
@@ -899,13 +903,26 @@ app.registerExtension({
                 if (row.elements) {
                     for (const element of row.elements) {
                         if (element.action || element.widget) {
+                            // Calculate proper bounds for clickable area
+                            let boundsY = element.y;
+                            let boundsHeight = element.height || LAYOUT.ROW_HEIGHT;
+                            
+                            // For text-based elements (dropdown, value, toggle, label), 
+                            // y is the text baseline, so adjust to get the full row area
+                            if (element.type === 'dropdown' || element.type === 'value' || element.type === 'toggle') {
+                                // y is set to row.y + ROW_HEIGHT/2 + 5 for text baseline
+                                // So calculate the actual row.y by subtracting
+                                boundsY = row.y;
+                                boundsHeight = LAYOUT.ROW_HEIGHT;
+                            }
+                            
                             this.clickableElements.push({
                                 ...element,
                                 bounds: {
                                     x: element.x,
-                                    y: element.y,
+                                    y: boundsY,
                                     width: element.width || 60,
-                                    height: element.height || LAYOUT.ROW_HEIGHT
+                                    height: boundsHeight
                                 }
                             });
                         }
@@ -999,19 +1016,25 @@ app.registerExtension({
                         text: lockModelWidget.value ? '[LOCK]Model' : 'Model',
                         x: LAYOUT.MARGIN + 170,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 80,
                         color: lockModelWidget.value ? COLORS.buttons.lock : COLORS.text.label,
                         widget: lockModelWidget
                     });
                     
                     if (lockModelWidget.value) {
-                        const lockValue = lora.locked_model_value || 0;
-                        row2.elements.push({
-                            type: 'value',
-                            text: `[${lockValue.toFixed(2)}]`,
-                            x: LAYOUT.MARGIN + 260,
-                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
-                            color: COLORS.text.value
-                        });
+                        // Find the locked value widget
+                        const lockedValueWidget = lora.widgets.find(w => w.name && w.name.includes('Value') && lora.widgets.indexOf(w) < lora.widgets.length / 2);
+                        if (lockedValueWidget) {
+                            row2.elements.push({
+                                type: 'value',
+                                text: `[${lockedValueWidget.value.toFixed(2)}]`,
+                                x: LAYOUT.MARGIN + 260,
+                                y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                                width: 50,
+                                color: COLORS.text.value,
+                                widget: lockedValueWidget
+                            });
+                        }
                     }
                 }
                 
@@ -1023,19 +1046,25 @@ app.registerExtension({
                         text: lockClipWidget.value ? '[LOCK]CLIP' : 'CLIP',
                         x: LAYOUT.MARGIN + 315,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 70,
                         color: lockClipWidget.value ? COLORS.buttons.lock : COLORS.text.label,
                         widget: lockClipWidget
                     });
                     
                     if (lockClipWidget.value) {
-                        const lockValue = lora.locked_clip_value || 0;
-                        row2.elements.push({
-                            type: 'value',
-                            text: `[${lockValue.toFixed(2)}]`,
-                            x: LAYOUT.MARGIN + 390,
-                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
-                            color: COLORS.text.value
-                        });
+                        // Find the locked value widget (second Value widget in the lora)
+                        const lockedValueWidget = lora.widgets.find(w => w.name && w.name.includes('Value') && lora.widgets.indexOf(w) > lora.widgets.length / 2);
+                        if (lockedValueWidget) {
+                            row2.elements.push({
+                                type: 'value',
+                                text: `[${lockedValueWidget.value.toFixed(2)}]`,
+                                x: LAYOUT.MARGIN + 390,
+                                y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                                width: 50,
+                                color: COLORS.text.value,
+                                widget: lockedValueWidget
+                            });
+                        }
                     }
                 }
             } else {
@@ -1056,6 +1085,7 @@ app.registerExtension({
                         text: `[${modelStrWidget.value.toFixed(2)}]`,
                         x: LAYOUT.MARGIN + 65,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: COLORS.text.value,
                         widget: modelStrWidget
                     });
@@ -1075,6 +1105,7 @@ app.registerExtension({
                         text: `[${minModelWidget.value.toFixed(1)}]`,
                         x: LAYOUT.MARGIN + 145,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 40,
                         color: COLORS.text.value,
                         widget: minModelWidget
                     });
@@ -1087,6 +1118,7 @@ app.registerExtension({
                         text: randomModelWidget.value ? '[RND]' : 'RND',
                         x: LAYOUT.MARGIN + 190,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: randomModelWidget.value ? COLORS.buttons.random : COLORS.text.label,
                         widget: randomModelWidget
                     });
@@ -1121,6 +1153,7 @@ app.registerExtension({
                         text: `[${clipStrWidget.value.toFixed(2)}]`,
                         x: LAYOUT.MARGIN + 50,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: COLORS.text.value,
                         widget: clipStrWidget
                     });
@@ -1140,6 +1173,7 @@ app.registerExtension({
                         text: `[${minClipWidget.value.toFixed(1)}]`,
                         x: LAYOUT.MARGIN + 130,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 40,
                         color: COLORS.text.value,
                         widget: minClipWidget
                     });
@@ -1152,6 +1186,7 @@ app.registerExtension({
                         text: randomClipWidget.value ? '[RND]' : 'RND',
                         x: LAYOUT.MARGIN + 175,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                        width: 50,
                         color: randomClipWidget.value ? COLORS.buttons.random : COLORS.text.label,
                         widget: randomClipWidget
                     });
@@ -1398,30 +1433,132 @@ app.registerExtension({
         /**
          * Handle mouse down events
          */
-        nodeType.prototype.onMouseDown = function(e, localPos) {
+        nodeType.prototype.onMouseDown = function(e, localPos, canvas) {
             for (const element of this.clickableElements) {
                 if (isPointInRect(localPos[0], localPos[1], element.bounds)) {
                     if (element.action) {
+                        // Direct action callback (for buttons)
                         element.action();
                         this.setDirtyCanvas(true, true);
                         return true;
                     }
                     if (element.widget) {
-                        // Trigger widget callback
-                        if (element.widget.callback) {
-                            // For combo widgets, we'd need to show a popup, but for now just cycle
-                            // For boolean widgets, toggle
-                            if (element.widget.type === 'toggle' || element.widget.type === 'boolean') {
-                                element.widget.value = !element.widget.value;
-                                element.widget.callback(element.widget.value);
-                                this.setDirtyCanvas(true, true);
+                        const widget = element.widget;
+                        
+                        // Handle different element types that reference widgets
+                        if (element.type === 'toggle') {
+                            // Toggle boolean widgets
+                            widget.value = !widget.value;
+                            if (widget.callback) {
+                                widget.callback(widget.value);
                             }
+                            this.setDirtyCanvas(true, true);
+                            return true;
+                        } 
+                        else if (element.type === 'dropdown') {
+                            // Show ComfyUI's native dropdown for combo widgets
+                            const options = widget.options ? widget.options.values : [];
+                            if (options && options.length > 0) {
+                                // Create a temporary context menu
+                                const menu = new LiteGraph.ContextMenu(
+                                    options,
+                                    {
+                                        event: e,
+                                        title: widget.name,
+                                        callback: (v) => {
+                                            widget.value = v.content;
+                                            if (widget.callback) {
+                                                widget.callback(v.content);
+                                            }
+                                            this.setDirtyCanvas(true, true);
+                                        }
+                                    }
+                                );
+                            }
+                            return true;
                         }
-                        return true;
+                        else if (element.type === 'value') {
+                            // For value elements (numeric), create a temporary input overlay
+                            this.showNumberInput(widget, element, e, canvas);
+                            return true;
+                        }
                     }
                 }
             }
             return false;
+        };
+        
+        /**
+         * Show number input overlay for editing numeric values
+         */
+        nodeType.prototype.showNumberInput = function(widget, element, event, canvas) {
+            // Get canvas element - try multiple sources
+            const canvasElement = canvas || (this.graph && this.graph.canvas && this.graph.canvas.canvas) || event.target;
+            if (!canvasElement) {
+                console.warn("Cannot show number input: canvas not available");
+                return;
+            }
+            
+            // Create an input element
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = widget.value.toString();
+            input.style.position = "fixed";
+            
+            // Position the input at the click location
+            const rect = canvasElement.getBoundingClientRect();
+            input.style.left = (rect.left + element.bounds.x) + "px";
+            input.style.top = (rect.top + element.bounds.y) + "px";
+            input.style.width = element.bounds.width + "px";
+            input.style.height = element.bounds.height + "px";
+            
+            // Style the input
+            input.style.border = "2px solid #5a8fb9";
+            input.style.backgroundColor = "#2d3e4a";
+            input.style.color = "#a0c4e0";
+            input.style.fontSize = "14px";
+            input.style.fontFamily = "monospace";
+            input.style.padding = "2px 5px";
+            input.style.zIndex = "10000";
+            
+            // Add input to document
+            document.body.appendChild(input);
+            input.focus();
+            input.select();
+            
+            // Handle input completion
+            const finishInput = () => {
+                const newValue = parseFloat(input.value);
+                if (!isNaN(newValue)) {
+                    // Clamp value to widget's min/max
+                    let clampedValue = newValue;
+                    if (widget.options) {
+                        if (widget.options.min !== undefined) {
+                            clampedValue = Math.max(widget.options.min, clampedValue);
+                        }
+                        if (widget.options.max !== undefined) {
+                            clampedValue = Math.min(widget.options.max, clampedValue);
+                        }
+                    }
+                    
+                    widget.value = clampedValue;
+                    if (widget.callback) {
+                        widget.callback(clampedValue);
+                    }
+                    this.setDirtyCanvas(true, true);
+                }
+                document.body.removeChild(input);
+            };
+            
+            // Enter key or blur to finish
+            input.addEventListener("blur", finishInput);
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    finishInput();
+                } else if (e.key === "Escape") {
+                    document.body.removeChild(input);
+                }
+            });
         };
         
         /**
