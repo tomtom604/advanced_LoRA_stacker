@@ -714,7 +714,7 @@ app.registerExtension({
                 // Collapse/expand toggle
                 headerRow.elements.push({
                     type: 'button',
-                    text: collapsed ? '▶' : '▼',
+                    text: collapsed ? '>' : 'v',
                     x: LAYOUT.MARGIN,
                     y: currentY,
                     width: LAYOUT.BUTTON_SIZE,
@@ -736,7 +736,7 @@ app.registerExtension({
                 // Remove group button
                 headerRow.elements.push({
                     type: 'button',
-                    text: '✕',
+                    text: 'X',
                     x: nodeWidth - LAYOUT.MARGIN - LAYOUT.BUTTON_SIZE,
                     y: currentY,
                     width: LAYOUT.BUTTON_SIZE,
@@ -942,7 +942,7 @@ app.registerExtension({
             
             row1.elements.push({
                 type: 'button',
-                text: '✕',
+                text: 'X',
                 x: nodeWidth - LAYOUT.MARGIN - LAYOUT.BUTTON_SIZE,
                 y: currentY,
                 width: LAYOUT.BUTTON_SIZE,
@@ -991,21 +991,23 @@ app.registerExtension({
                 if (lockModelWidget) {
                     row2.elements.push({
                         type: 'toggle',
-                        text: '🔒Model',
+                        text: lockModelWidget.value ? '[LOCK]Model' : 'Model',
                         x: LAYOUT.MARGIN + 170,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
                         color: lockModelWidget.value ? COLORS.buttons.lock : COLORS.text.label,
                         widget: lockModelWidget
                     });
                     
-                    const lockValue = lora.locked_model_value || 0;
-                    row2.elements.push({
-                        type: 'value',
-                        text: `[${lockValue.toFixed(2)}]`,
-                        x: LAYOUT.MARGIN + 245,
-                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
-                        color: COLORS.text.value
-                    });
+                    if (lockModelWidget.value) {
+                        const lockValue = lora.locked_model_value || 0;
+                        row2.elements.push({
+                            type: 'value',
+                            text: `[${lockValue.toFixed(2)}]`,
+                            x: LAYOUT.MARGIN + 260,
+                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            color: COLORS.text.value
+                        });
+                    }
                 }
                 
                 // Lock CLIP
@@ -1013,21 +1015,23 @@ app.registerExtension({
                 if (lockClipWidget) {
                     row2.elements.push({
                         type: 'toggle',
-                        text: '🔒CLIP',
-                        x: LAYOUT.MARGIN + 305,
+                        text: lockClipWidget.value ? '[LOCK]CLIP' : 'CLIP',
+                        x: LAYOUT.MARGIN + 315,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
                         color: lockClipWidget.value ? COLORS.buttons.lock : COLORS.text.label,
                         widget: lockClipWidget
                     });
                     
-                    const lockValue = lora.locked_clip_value || 0;
-                    row2.elements.push({
-                        type: 'value',
-                        text: `[${lockValue.toFixed(2)}]`,
-                        x: LAYOUT.MARGIN + 370,
-                        y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
-                        color: COLORS.text.value
-                    });
+                    if (lockClipWidget.value) {
+                        const lockValue = lora.locked_clip_value || 0;
+                        row2.elements.push({
+                            type: 'value',
+                            text: `[${lockValue.toFixed(2)}]`,
+                            x: LAYOUT.MARGIN + 390,
+                            y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
+                            color: COLORS.text.value
+                        });
+                    }
                 }
             } else {
                 // Ungrouped: MODEL controls on row 2
@@ -1075,7 +1079,7 @@ app.registerExtension({
                 if (randomModelWidget) {
                     row2.elements.push({
                         type: 'toggle',
-                        text: '🎲',
+                        text: randomModelWidget.value ? '[RND]' : 'RND',
                         x: LAYOUT.MARGIN + 190,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
                         color: randomModelWidget.value ? COLORS.buttons.random : COLORS.text.label,
@@ -1140,7 +1144,7 @@ app.registerExtension({
                 if (randomClipWidget) {
                     row3.elements.push({
                         type: 'toggle',
-                        text: '🎲',
+                        text: randomClipWidget.value ? '[RND]' : 'RND',
                         x: LAYOUT.MARGIN + 175,
                         y: currentY + LAYOUT.ROW_HEIGHT / 2 + 5,
                         color: randomClipWidget.value ? COLORS.buttons.random : COLORS.text.label,
@@ -1277,21 +1281,45 @@ app.registerExtension({
         nodeType.prototype.drawElement = function(ctx, element) {
             const isHovered = this.hoveredElement === element;
             
+            // Enable better text rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
             switch (element.type) {
                 case 'label':
-                    ctx.font = element.bold ? 'bold 12px Arial' : '12px Arial';
+                    ctx.font = element.bold ? 'bold 14px sans-serif' : '14px sans-serif';
                     ctx.fillStyle = element.color || COLORS.text.label;
                     ctx.textAlign = 'left';
                     ctx.textBaseline = 'middle';
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
                     ctx.fillText(element.text, element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
                     break;
                     
                 case 'value':
-                    ctx.font = '12px monospace';
+                    ctx.font = '14px monospace';
                     ctx.fillStyle = element.color || COLORS.text.value;
                     ctx.textAlign = 'left';
                     ctx.textBaseline = 'middle';
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
                     ctx.fillText(element.text, element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
                     break;
                     
                 case 'button':
@@ -1306,28 +1334,58 @@ app.registerExtension({
                         btnColor,
                         null
                     );
-                    ctx.font = 'bold 12px Arial';
+                    ctx.font = 'bold 14px sans-serif';
                     ctx.fillStyle = '#ffffff';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
+                    // Add text shadow for button text
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                    ctx.shadowBlur = 2;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
                     ctx.fillText(element.text, element.x + element.width / 2, element.y + element.height / 2);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
                     break;
                     
                 case 'dropdown':
-                    ctx.font = '12px Arial';
+                    ctx.font = '14px sans-serif';
                     ctx.fillStyle = element.color || COLORS.text.value;
                     ctx.textAlign = 'left';
                     ctx.textBaseline = 'middle';
                     const displayText = element.text.length > 30 ? element.text.substring(0, 27) + '...' : element.text;
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
                     ctx.fillText('[' + displayText + ']', element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
                     break;
                     
                 case 'toggle':
-                    ctx.font = '11px Arial';
+                    ctx.font = 'bold 13px sans-serif';
                     ctx.fillStyle = element.color;
                     ctx.textAlign = 'left';
                     ctx.textBaseline = 'middle';
+                    // Add text shadow for better legibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 3;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
                     ctx.fillText(element.text, element.x, element.y);
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
                     break;
             }
         };
