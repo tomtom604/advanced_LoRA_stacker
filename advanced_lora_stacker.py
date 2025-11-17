@@ -13,6 +13,7 @@ import comfy.utils
 class AdvancedLoraStacker:
     """
     A comprehensive LoRA stacking node with group management, presets, and random strength distribution.
+    Redesigned to use native ComfyUI widgets with minimal JavaScript.
     """
 
     @classmethod

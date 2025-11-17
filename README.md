@@ -2,17 +2,20 @@
 
 A comprehensive ComfyUI custom node that combines dynamic UI capabilities, FLUX LoRA preset functionality, and sophisticated group-based random strength distribution.
 
+**NEW in v2.0**: Complete UI redesign using **native ComfyUI widgets** for better performance, maintainability, and compatibility!
+
 ## Features
 
 ### 🎯 Core Functionality
 
-- **Dynamic UI**: Expandable interface with "Add LoRA" and "Add Group" buttons
+- **Dynamic UI**: Native ComfyUI widgets with "Add LoRA" and "Add Group" buttons
 - **LoRA Presets**: Five preset types targeting specific model blocks
 - **Group Management**: Organize LoRAs into groups with shared max strengths
 - **Random Strength Distribution**: Automatically partition strength values across grouped LoRAs
 - **Individual Randomization**: Per-LoRA randomization controls for ungrouped LoRAs
 - **Lock System**: Lock specific strength values while randomizing others
 - **Collapsible Groups**: Expand/collapse groups to manage UI space
+- **Native Rendering**: All UI elements use ComfyUI's standard widgets (no custom canvas drawing)
 
 ### 📋 LoRA Preset Types
 
@@ -126,7 +129,7 @@ The node uses a "stick-breaking" method for random strength distribution:
 
 ## UI Layout Structure
 
-### Visual Hierarchy
+### Visual Hierarchy (Native Widgets)
 
 ```
 ┌─────────────────────────────────────┐
@@ -134,40 +137,50 @@ The node uses a "stick-breaking" method for random strength distribution:
 │ CLIP input                          │
 │ Seed parameter                      │
 ├─────────────────────────────────────┤
-│ ┌─ Group 1 ───────────────────────┐ │
-│ │ Max MODEL: 1.0                  │ │
-│ │ Max CLIP: 1.0                   │ │
-│ │ ➕ Add LoRA to Group 1          │ │
-│ │   LoRA 1: name, preset, locks   │ │
-│ │   LoRA 2: name, preset, locks   │ │
-│ └─────────────────────────────────┘ │
-│ ┌─ Group 2 ───────────────────────┐ │
-│ │ Max MODEL: 0.8                  │ │
-│ │ Max CLIP: 0.8                   │ │
-│ │ ➕ Add LoRA to Group 2          │ │
-│ │   LoRA 3: name, preset, locks   │ │
-│ └─────────────────────────────────┘ │
+│ ═══ GROUP 1 ═══                     │
+│ ▼ Collapse                          │
+│ ✕ Remove Group                      │
+│ Max MODEL: [1.0]                    │
+│ Max CLIP: [1.0]                     │
+│ ➕ Add LoRA to Group 1              │
+│ ───────────                         │
+│   LoRA: [dropdown]                  │
+│   Type: [dropdown]                  │
+│   Lock MODEL: [toggle]              │
+│     Value: [0.50]                   │
+│   Lock CLIP: [toggle]               │
+│ ───────────                         │
+│   LoRA: [dropdown]                  │
+│   Type: [dropdown]                  │
 ├─────────────────────────────────────┤
-│ ➕ Add LoRA                         │
-│ ➕ Add Group                        │
+│ ═══ GROUP 2 ═══                     │
+│ ▶ Expand (collapsed)                │
 ├─────────────────────────────────────┤
-│ Ungrouped LoRA 1                    │
-│   - MODEL controls with random      │
-│   - CLIP controls with random       │
-│ Ungrouped LoRA 2                    │
-│   - MODEL controls with random      │
-│   - CLIP controls with random       │
+│ ➕ Add LoRA                          │
+│ ➕ Add Group                         │
+├─────────────────────────────────────┤
+│ ───────────                         │
+│ LoRA: [dropdown]                    │
+│ Type: [dropdown]                    │
+│ MODEL Str: [1.0]                    │
+│   Random: [toggle]                  │
+│     Min: [0.0]                      │
+│     Max: [1.0]                      │
+│ CLIP Str: [1.0]                     │
+│   Random: [toggle]                  │
+│ ✕ Remove                            │
 └─────────────────────────────────────┘
 ```
 
 ### Design Principles
 
-- **Groups always at top**: All groups displayed before main buttons
-- **Ungrouped at bottom**: Solo LoRAs appear after main buttons
-- **No intermixing**: Strict separation between grouped and ungrouped
-- **Collapsible containers**: Groups can be collapsed to save space
-- **Rounded corners**: 6px radius matching ComfyUI native styling
-- **Color coding**: Groups (#1a2a3a), Solo LoRAs (#1a1a1a)
+- **Native ComfyUI Widgets**: All standard widget types
+- **Vertical Stacking**: Natural ComfyUI layout
+- **Visual Separators**: Text widgets for headers (═══) and dividers (───)
+- **Indentation**: Names with spaces for hierarchy ("  LoRA" vs "LoRA")
+- **Dynamic Show/Hide**: Widgets appear/disappear based on toggles
+- **Collapsible Groups**: Click collapse button to hide group contents
+- **Clean & Organized**: Logical grouping of related controls
 
 ## Console Output
 
@@ -222,14 +235,22 @@ Ungrouped LoRAs
 
 ### JavaScript Frontend (`js/advanced_lora_stacker.js`)
 
+**Design**: Native ComfyUI widgets with minimal JavaScript (v2.0 redesign)
+
 **Key Functions**:
-- `addGroup()`: Creates group container
+- `addGroup()`: Creates group with native widgets
 - `removeGroup()`: Removes group and members
-- `toggleGroupCollapse()`: Show/hide group contents
-- `addLora(groupId)`: Adds LoRA to group or ungrouped
+- `addLora(groupId)`: Adds LoRA with native controls
 - `removeLora(loraId)`: Removes individual LoRA
 - `updateStackData()`: Serializes state to JSON
 - `fetchLoraList()`: Fetches available LoRAs via API
+
+**Widget Types Used**:
+- `text`: Headers and visual separators
+- `combo`: LoRA selection and preset dropdowns
+- `number`: Strength values with sliders
+- `toggle`: Lock and Random checkboxes
+- `button`: Add/Remove actions
 
 **Data Structure**:
 ```json
@@ -256,6 +277,19 @@ Ungrouped LoRAs
   ]
 }
 ```
+
+### UI Redesign (v2.0)
+
+The node has been completely redesigned to use **native ComfyUI widgets** instead of custom canvas rendering:
+
+- **70% less code**: Simplified from 1654 to 494 lines of JavaScript
+- **No canvas rendering**: ComfyUI handles all visual rendering
+- **No custom mouse handlers**: Native widget interactions
+- **Better performance**: Optimized native rendering
+- **Better accessibility**: Keyboard navigation, screen readers
+- **Better compatibility**: No custom rendering to break
+
+For details, see [NATIVE_WIDGET_REDESIGN.md](NATIVE_WIDGET_REDESIGN.md)
 
 ## Workflow Examples
 
