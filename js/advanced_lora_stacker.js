@@ -690,6 +690,11 @@ app.registerExtension({
          * Calculate layout for all elements (groups, loras, buttons)
          */
         nodeType.prototype.calculateLayout = function() {
+            // Safety check: ensure node is initialized
+            if (!this.groups || !Array.isArray(this.groups) || !this.loras || !Array.isArray(this.loras)) {
+                return { rows: [], containers: [], totalHeight: LAYOUT.TITLE_BAR_HEIGHT + 60 };
+            }
+            
             const rows = [];
             const containers = []; // Store containers separately to draw first
             this.clickableElements = [];
