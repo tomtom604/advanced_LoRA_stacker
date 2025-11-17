@@ -124,10 +124,7 @@ app.registerExtension({
             
             // Find the seed widget - it should already exist from INPUT_TYPES
             this.seedWidget = this.widgets.find(w => w.name === "seed");
-            // Make seed widget invisible - we'll render it on canvas
-            if (this.seedWidget) {
-                this.seedWidget.computeSize = () => [0, -4];
-            }
+            // Keep seed widget visible - it's a standard ComfyUI widget that users expect to interact with normally
             
             // Find stack_data widget (hidden)
             this.stackDataWidget = this.widgets.find(w => w.name === "stack_data");
@@ -694,6 +691,7 @@ app.registerExtension({
          */
         nodeType.prototype.calculateLayout = function() {
             const rows = [];
+            const containers = []; // Store containers separately to draw first
             this.clickableElements = [];
             
             let currentY = LAYOUT.TITLE_BAR_HEIGHT;
@@ -809,7 +807,7 @@ app.registerExtension({
                     // Group LoRAs
                     const groupLoras = this.loras.filter(l => l.group_id === group.id);
                     for (const lora of groupLoras) {
-                        currentY = this.addLoraRows(rows, lora, currentY, nodeWidth, true);
+                        currentY = this.addLoraRows(rows, lora, currentY, nodeWidth, true, containers);
                     }
                     
                     // Add LoRA button row
@@ -835,11 +833,10 @@ app.registerExtension({
                     currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
                 }
                 
-                // Draw group container
-                const groupHeight = currentY - groupStartY;
-                rows.push({
+                // Add group container to be drawn first
+                containers.push({
                     y: groupStartY,
-                    height: groupHeight,
+                    height: currentY - groupStartY,
                     isContainer: true,
                     background: COLORS.group.background,
                     border: COLORS.group.border,
@@ -854,7 +851,7 @@ app.registerExtension({
             const ungroupedLoras = this.loras.filter(l => l.group_id === null);
             if (ungroupedLoras.length > 0) {
                 for (const lora of ungroupedLoras) {
-                    currentY = this.addLoraRows(rows, lora, currentY, nodeWidth, false);
+                    currentY = this.addLoraRows(rows, lora, currentY, nodeWidth, false, containers);
                 }
             }
             
@@ -911,13 +908,13 @@ app.registerExtension({
                 }
             }
             
-            return { rows, totalHeight: currentY };
+            return { rows, containers, totalHeight: currentY };
         };
         
         /**
          * Add rows for a single LoRA
          */
-        nodeType.prototype.addLoraRows = function(rows, lora, currentY, nodeWidth, isGrouped) {
+        nodeType.prototype.addLoraRows = function(rows, lora, currentY, nodeWidth, isGrouped, containers) {
             const loraStartY = currentY;
             const contentWidth = nodeWidth - (LAYOUT.MARGIN * 2);
             const backgroundColor = isGrouped ? COLORS.lora.grouped : COLORS.lora.ungrouped;
@@ -1186,16 +1183,17 @@ app.registerExtension({
                 currentY += LAYOUT.ROW_HEIGHT + LAYOUT.PADDING;
             }
             
-            // Draw LoRA container
-            const loraHeight = currentY - loraStartY;
-            rows.push({
-                y: loraStartY,
-                height: loraHeight,
-                isContainer: true,
-                background: backgroundColor,
-                x: LAYOUT.MARGIN + (isGrouped ? 10 : 0),
-                width: contentWidth - (isGrouped ? 10 : 0)
-            });
+            // Add LoRA container to be drawn first
+            if (containers) {
+                containers.push({
+                    y: loraStartY,
+                    height: currentY - loraStartY,
+                    isContainer: true,
+                    background: backgroundColor,
+                    x: LAYOUT.MARGIN + (isGrouped ? 10 : 0),
+                    width: contentWidth - (isGrouped ? 10 : 0)
+                });
+            }
             
             return currentY;
         };
@@ -1240,24 +1238,23 @@ app.registerExtension({
             const layout = this.calculateLayout();
             
             // Draw containers first (background)
-            for (const row of layout.rows) {
-                if (row.isContainer) {
+            if (layout.containers) {
+                for (const container of layout.containers) {
                     this.drawRoundedRect(
                         ctx,
-                        row.x,
-                        row.y,
-                        row.width,
-                        row.height,
+                        container.x,
+                        container.y,
+                        container.width,
+                        container.height,
                         LAYOUT.BORDER_RADIUS,
-                        row.background,
-                        row.border
+                        container.background,
+                        container.border
                     );
                 }
             }
             
             // Draw row backgrounds and elements
             for (const row of layout.rows) {
-                if (row.isContainer) continue;
                 
                 // Draw row background if specified
                 if (row.background && !row.isContainer) {
