@@ -221,8 +221,8 @@ app.registerExtension({
             maxModelWidget.widget.groupWidget = true;
             maxModelWidget.widget.groupId = groupId;
             maxModelWidget.widget.computeSize = () => [0, -4]; // Make invisible
-            maxModelWidget.widget.callback = () => {
-                group.max_model = maxModelWidget.widget.value;
+            maxModelWidget.widget.callback = (value) => {
+                group.max_model = value;
                 this.updateStackData();
             };
             group.widgets.push(maxModelWidget.widget);
@@ -234,8 +234,8 @@ app.registerExtension({
             maxClipWidget.widget.groupWidget = true;
             maxClipWidget.widget.groupId = groupId;
             maxClipWidget.widget.computeSize = () => [0, -4]; // Make invisible
-            maxClipWidget.widget.callback = () => {
-                group.max_clip = maxClipWidget.widget.value;
+            maxClipWidget.widget.callback = (value) => {
+                group.max_clip = value;
                 this.updateStackData();
             };
             group.widgets.push(maxClipWidget.widget);
@@ -689,19 +689,47 @@ app.registerExtension({
         };
         
         /**
+         * Calculate the Y offset where custom canvas rendering should start
+         * This accounts for the height of visible ComfyUI widgets
+         */
+        nodeType.prototype.getCustomRenderingOffset = function() {
+            let offset = LAYOUT.TITLE_BAR_HEIGHT; // Start with title bar
+            
+            // Calculate height used by visible widgets (MODEL, CLIP, seed)
+            // Each visible widget takes approximately 30 pixels
+            let visibleWidgetCount = 0;
+            
+            for (const widget of this.widgets) {
+                // Count widgets that are NOT hidden (not our custom invisible widgets)
+                if (!widget.groupWidget && widget.type !== "hidden" && 
+                    (!widget.computeSize || widget.computeSize()[1] >= 0)) {
+                    visibleWidgetCount++;
+                }
+            }
+            
+            // Add space for visible widgets (30px per widget)
+            // Plus extra padding for control_after_generate controls (20px)
+            offset += (visibleWidgetCount * 30) + 20;
+            
+            return offset;
+        };
+        
+        /**
          * Calculate layout for all elements (groups, loras, buttons)
          */
         nodeType.prototype.calculateLayout = function() {
             // Safety check: ensure node is initialized
             if (!this.groups || !Array.isArray(this.groups) || !this.loras || !Array.isArray(this.loras)) {
-                return { rows: [], containers: [], totalHeight: LAYOUT.TITLE_BAR_HEIGHT + 60 };
+                const defaultOffset = this.getCustomRenderingOffset ? this.getCustomRenderingOffset() : LAYOUT.TITLE_BAR_HEIGHT + 60;
+                return { rows: [], containers: [], totalHeight: defaultOffset + 60 };
             }
             
             const rows = [];
             const containers = []; // Store containers separately to draw first
             this.clickableElements = [];
             
-            let currentY = LAYOUT.TITLE_BAR_HEIGHT;
+            // Start custom rendering after visible widgets
+            let currentY = this.getCustomRenderingOffset();
             const nodeWidth = this.size[0];
             const contentWidth = nodeWidth - (LAYOUT.MARGIN * 2);
             
@@ -1466,9 +1494,11 @@ app.registerExtension({
                                         event: e,
                                         title: widget.name,
                                         callback: (v) => {
-                                            widget.value = v.content;
+                                            // v can be either a string value or an object with content property
+                                            const newValue = (typeof v === 'object' && v.content !== undefined) ? v.content : v;
+                                            widget.value = newValue;
                                             if (widget.callback) {
-                                                widget.callback(v.content);
+                                                widget.callback(newValue);
                                             }
                                             this.setDirtyCanvas(true, true);
                                         }
@@ -1499,18 +1529,40 @@ app.registerExtension({
                 return;
             }
             
+            // Get canvas context for coordinate transformation
+            const graphCanvas = this.graph && this.graph.canvas;
+            if (!graphCanvas) {
+                console.warn("Cannot show number input: graph canvas not available");
+                return;
+            }
+            
             // Create an input element
             const input = document.createElement("input");
             input.type = "text";
             input.value = widget.value.toString();
             input.style.position = "fixed";
             
-            // Position the input at the click location
+            // Convert node-local coordinates to canvas coordinates
+            // element.bounds has x,y relative to the node
+            // We need to add the node's position and account for canvas offset/scale
+            const nodeX = this.pos[0];
+            const nodeY = this.pos[1];
+            const canvasX = nodeX + element.bounds.x;
+            const canvasY = nodeY + element.bounds.y;
+            
+            // Transform canvas coordinates to screen coordinates
             const rect = canvasElement.getBoundingClientRect();
-            input.style.left = (rect.left + element.bounds.x) + "px";
-            input.style.top = (rect.top + element.bounds.y) + "px";
-            input.style.width = element.bounds.width + "px";
-            input.style.height = element.bounds.height + "px";
+            const scale = graphCanvas.ds ? graphCanvas.ds.scale : 1.0;
+            const offsetX = graphCanvas.ds ? graphCanvas.ds.offset[0] : 0;
+            const offsetY = graphCanvas.ds ? graphCanvas.ds.offset[1] : 0;
+            
+            const screenX = rect.left + (canvasX + offsetX) * scale;
+            const screenY = rect.top + (canvasY + offsetY) * scale;
+            
+            input.style.left = screenX + "px";
+            input.style.top = screenY + "px";
+            input.style.width = (element.bounds.width * scale) + "px";
+            input.style.height = (element.bounds.height * scale) + "px";
             
             // Style the input
             input.style.border = "2px solid #5a8fb9";
