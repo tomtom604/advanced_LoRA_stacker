@@ -695,6 +695,12 @@ app.registerExtension({
         nodeType.prototype.getCustomRenderingOffset = function() {
             let offset = LAYOUT.TITLE_BAR_HEIGHT; // Start with title bar
             
+            // Safety check: ensure widgets array exists and is iterable
+            if (!this.widgets || !Array.isArray(this.widgets)) {
+                // Return default offset if widgets not initialized yet
+                return offset + 60;
+            }
+            
             // Calculate height used by visible widgets (MODEL, CLIP, seed)
             // Each visible widget takes approximately 30 pixels
             let visibleWidgetCount = 0;
