@@ -307,6 +307,7 @@ class TextConcatenator:
     Provides both concatenated output and indexed output for individual access.
     """
 
+
     @classmethod
     def INPUT_TYPES(cls):
         return {

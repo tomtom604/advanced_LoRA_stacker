@@ -1,12 +1,16 @@
 # Advanced LoRA Stacker
 
-A comprehensive ComfyUI custom node that combines dynamic UI capabilities, FLUX LoRA preset functionality, and sophisticated group-based random strength distribution.
+A comprehensive ComfyUI custom node collection that includes:
+1. **Advanced LoRA Stacker**: Dynamic UI with LoRA preset functionality and sophisticated group-based random strength distribution
+2. **Text Concatenator**: Infinite dynamic text input concatenation with indexing support
 
 **NEW in v2.0**: Complete UI redesign using **native ComfyUI widgets** for better performance, maintainability, and compatibility!
 
-## Features
+## Nodes
 
-### 🎯 Core Functionality
+### Advanced LoRA Stacker
+
+#### 🎯 Core Functionality
 
 - **Dynamic UI**: Native ComfyUI widgets with "Add LoRA" and "Add Group" buttons
 - **LoRA Presets**: Five preset types targeting specific model blocks
@@ -16,6 +20,16 @@ A comprehensive ComfyUI custom node that combines dynamic UI capabilities, FLUX 
 - **Lock System**: Lock specific strength values while randomizing others
 - **Collapsible Groups**: Expand/collapse groups to manage UI space
 - **Native Rendering**: All UI elements use ComfyUI's standard widgets (no custom canvas drawing)
+
+### Text Concatenator
+
+#### 🔗 Core Functionality
+
+- **Infinite Dynamic Inputs**: Automatically reveals new text input connections as you plug them in
+- **Custom Delimiter**: Multiline text field for flexible separators (commas, newlines, custom strings)
+- **Concatenated Output**: Joins all connected text inputs with the specified delimiter
+- **Indexed Output**: Access any specific input by index (0-based)
+- **Smart Ordering**: Maintains proper order even when inputs are connected out of sequence
 
 ### 📋 LoRA Preset Types
 
@@ -320,6 +334,76 @@ For details, see [NATIVE_WIDGET_REDESIGN.md](NATIVE_WIDGET_REDESIGN.md)
 4. Run multiple times to find sweet spot
 5. Once found, disable random and set fixed value
 
+## Text Concatenator Usage
+
+The Text Concatenator node provides a simple and powerful way to combine multiple text inputs with custom delimiters.
+
+### Getting Started
+
+1. Add the "Text Concatenator" node to your workflow
+2. The node starts with:
+   - **delimiter**: Text field for custom separator (default: ", ")
+   - **index**: Integer to select specific input (default: 0)
+   - One empty text input slot
+   - Two outputs: **concatenated** and **indexed**
+
+### How It Works
+
+1. **Connect a text input** - When you connect a text source to the input slot, a new empty slot automatically appears below it
+2. **Keep adding inputs** - Connect as many text inputs as you need; new slots keep appearing
+3. **Disconnect to remove** - Disconnecting an input automatically removes that slot and renumbers remaining inputs
+
+### Parameters
+
+- **delimiter**: The text to place between concatenated inputs
+  - Multiline support for complex separators
+  - Examples: `", "`, `"\n"`, `" | "`, `"\n---\n"`
+- **index**: Zero-based index to select a specific input
+  - 0 = first input, 1 = second input, etc.
+  - Returns empty string if index is out of range
+
+### Outputs
+
+- **concatenated**: All text inputs joined with the delimiter
+  - Example: `"Hello, World, Test"` with delimiter `", "`
+- **indexed**: The specific text at the selected index
+  - Example: index=1 returns `"World"` from the above inputs
+
+### Example Workflows
+
+#### Example 1: Building a Prompt
+
+1. Connect multiple text sources (base prompt, style tags, quality tags)
+2. Set delimiter to `", "`
+3. Use **concatenated** output as your final prompt
+4. Use **indexed** output to preview individual components
+
+#### Example 2: Multi-line Text Assembly
+
+1. Connect text sources for different sections
+2. Set delimiter to `"\n\n"` (double newline)
+3. Creates a properly formatted multi-paragraph text
+
+#### Example 3: Template Building
+
+1. Connect template parts (header, body, footer)
+2. Set delimiter to `"\n---\n"` (horizontal rule separator)
+3. Build structured documents with clear sections
+
+#### Example 4: Random Selection with Indexing
+
+1. Connect multiple text variations
+2. Use a random integer node to set the **index** parameter
+3. The **indexed** output will randomly select one of the inputs
+4. The **concatenated** output shows all options (useful for debugging)
+
+### Tips
+
+- **Empty/None inputs are automatically skipped** - No need to worry about blank entries
+- **Inputs are automatically ordered** - text_1, text_2, text_3, etc., regardless of connection order
+- **Use multiline delimiter** - Perfect for creating formatted output with newlines, sections, or custom markup
+- **Access any input by index** - Makes the node multi-functional (concatenator + selector)
+
 ## Troubleshooting
 
 ### LoRAs Not Appearing in Dropdown
@@ -360,8 +444,18 @@ Inspired by:
 - **rgthree's Power Lora Loader**: Dynamic UI concept
 - **Bob's LoRA Loader (FLUX)**: Preset functionality
 - **Random Partitioning Algorithm**: Stick-breaking method
+- **cozy_ex_dynamic by amorano**: Dynamic input pattern for ComfyUI nodes
 
 ## Changelog
+
+### v2.1 (TextConcatenator Addition)
+- **New Node: Text Concatenator**
+  - Infinite dynamic text inputs
+  - Auto-expanding input slots as connections are made
+  - Custom multiline delimiter support
+  - Concatenated output (all inputs joined)
+  - Indexed output (access individual inputs by index)
+  - Comprehensive test suite with 8 test cases
 
 ### v1.0.0 (Initial Release)
 - Dynamic expandable UI with groups
