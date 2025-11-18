@@ -300,10 +300,80 @@ class AdvancedLoraStacker:
         return (model, clip, info)
 
 
+class TextConcatenator:
+    """
+    A text concatenation node with infinite dynamic inputs.
+    When a user plugs in a new text input, a new input connection reveals itself.
+    Provides both concatenated output and indexed output for individual access.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "delimiter": ("STRING", {
+                    "default": ", ",
+                    "multiline": True
+                }),
+                "index": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 999
+                }),
+            },
+            "optional": {}
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("concatenated", "indexed")
+    FUNCTION = "concatenate_texts"
+    CATEGORY = "text"
+
+    def concatenate_texts(self, delimiter, index, **kwargs):
+        """
+        Concatenate all text inputs with the specified delimiter.
+        Also return the text at the specified index.
+        
+        Args:
+            delimiter: String to use between concatenated texts
+            index: Index of the specific text to return (0-based)
+            **kwargs: Dynamic text inputs (text_1, text_2, etc.)
+        
+        Returns:
+            Tuple of (concatenated_text, indexed_text)
+        """
+        # Collect all text inputs from kwargs
+        # They will be named text_1, text_2, text_3, etc.
+        text_inputs = []
+        
+        # Sort by input number to maintain order
+        sorted_keys = sorted(
+            [k for k in kwargs.keys() if k.startswith('text_')],
+            key=lambda x: int(x.split('_')[1]) if len(x.split('_')) > 1 and x.split('_')[1].isdigit() else 0
+        )
+        
+        for key in sorted_keys:
+            value = kwargs[key]
+            if value is not None and value != "":
+                text_inputs.append(str(value))
+        
+        # Concatenate all texts with delimiter
+        concatenated = delimiter.join(text_inputs) if text_inputs else ""
+        
+        # Get indexed text (default to empty string if index is out of range)
+        indexed = ""
+        if 0 <= index < len(text_inputs):
+            indexed = text_inputs[index]
+        
+        return (concatenated, indexed)
+
+
 NODE_CLASS_MAPPINGS = {
-    "AdvancedLoraStacker": AdvancedLoraStacker
+    "AdvancedLoraStacker": AdvancedLoraStacker,
+    "TextConcatenator": TextConcatenator
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "AdvancedLoraStacker": "Advanced LoRA Stacker"
+    "AdvancedLoraStacker": "Advanced LoRA Stacker",
+    "TextConcatenator": "Text Concatenator"
 }
